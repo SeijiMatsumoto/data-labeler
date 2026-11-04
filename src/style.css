@@ -1519,3 +1519,103 @@ input[type="checkbox"] {
   font-size: 13px;
   color: #80946d;
 }
+.workspace-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  font-size: 10px;
+  color: #7b8b6e;
+  letter-spacing: 0.4px;
+}
+.workspace-picker select {
+  width: 100%;
+  min-width: 0;
+  background: #fff;
+  border: 1px solid #d8e2ce;
+  border-radius: 6px;
+  padding: 10px;
+  color: #3d5433;
+  font-size: 12px;
+  letter-spacing: 0;
+}
+.workspace-tools {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 8px 0 23px;
+}
+.workspace-tools button {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+  background: none;
+  border: 0;
+  color: #788d67;
+  font-size: 10px;
+  padding: 5px 0;
+}
+.workspace-tools button:hover {
+  color: #36592a;
+}
+.dataset-entry {
+  display: flex;
+  align-items: center;
+  position: relative;
+}
+.dataset-entry .dataset {
+  padding-right: 30px;
+  min-width: 0;
+}
+.dataset-delete {
+  position: absolute;
+  right: 4px;
+  color: #9aa58b;
+}
+.dataset-delete:hover {
+  color: #a95841;
+  background: #f5e9df;
+}
+.import-workspace {
+  margin-bottom: 22px;
+}
+.workspace-name-label {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-size: 12px;
+}
+.workspace-name-label input {
+  padding: 11px;
+  border: 1px solid #d7e3ca;
+  border-radius: 5px;
+}
+.workspace-danger {
+  border-top: 1px solid #e4e9dd;
+  margin-top: 28px;
+  padding-top: 22px;
+}
+.workspace-danger h3 {
+  font-size: 13px;
+  font-weight: 550;
+}
+.workspace-danger p {
+  font-size: 12px;
+  color: #8b977e;
+}
+.workspace-danger .workspace-picker {
+  margin-bottom: 16px;
+}
+.button.delete-action {
+  background: #a55843;
+  border-color: #a55843;
+  color: #fff;
+}
+.button.delete-action:hover {
+  background: #8e4734;
+}
+.workspace-empty {
+  font-size: 11px;
+  color: #93a085;
+  padding: 10px 8px;
+  line-height: 1.6;
+}

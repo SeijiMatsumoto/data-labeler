@@ -405,3 +405,160 @@ describe("encoded dataset and example IDs", () => {
     expect(screen.queryByRole("alert")).toBeNull();
   });
 });
+
+describe("named workspaces", () => {
+  it("creates, renames, switches, and imports into the selected workspace", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    expect(
+      (screen.getByRole("combobox", { name: "Workspace" }) as HTMLSelectElement)
+        .selectedOptions[0].textContent,
+    ).toBe("Default Workspace");
+    await user.click(screen.getByRole("button", { name: "Create workspace" }));
+    await user.type(
+      screen.getByRole("textbox", { name: "Workspace name" }),
+      "Takeaway review",
+    );
+    await user.click(
+      screen.getAllByRole("button", { name: "Create workspace" }).at(-1)!,
+    );
+    const group = JSON.parse(localStorage.getItem(key)!).activeWorkspaceId;
+    expect(window.location.pathname).toBe(`/workspaces/${group}`);
+    await user.click(screen.getByRole("button", { name: "Manage" }));
+    const name = screen.getByRole("textbox", { name: "Workspace name" });
+    await user.clear(name);
+    await user.type(name, "Editorial review");
+    await user.click(
+      screen.getByRole("button", { name: "Save workspace name" }),
+    );
+    await user.click(
+      screen.getByRole("button", { name: /Try sample dataset/ }),
+    );
+    expect(
+      JSON.parse(localStorage.getItem(key)!).datasetWorkspaces[sample.id],
+    ).toBe(group);
+    await user.selectOptions(
+      screen.getByRole("combobox", { name: "Workspace" }),
+      "default",
+    );
+    expect(screen.queryByRole("link", { name: /Answer quality/ })).toBeNull();
+    await user.click(
+      screen.getAllByRole("button", { name: "Import dataset" })[0],
+    );
+    expect(
+      (
+        screen.getByRole("combobox", {
+          name: "Import workspace",
+        }) as HTMLSelectElement
+      ).value,
+    ).toBe("default");
+    const other = { ...sample, id: "other-dataset", name: "Other dataset" };
+    fireEvent.change(screen.getByRole("textbox", { name: "Dataset JSON" }), {
+      target: { value: JSON.stringify(other) },
+    });
+    await user.selectOptions(
+      screen.getByRole("combobox", { name: "Import workspace" }),
+      group,
+    );
+    await user.click(screen.getByRole("button", { name: "Preview dataset" }));
+    await user.click(screen.getByRole("button", { name: /Start labeling/ }));
+    expect(
+      JSON.parse(localStorage.getItem(key)!).datasetWorkspaces[other.id],
+    ).toBe(group);
+    expect(
+      (screen.getByRole("combobox", { name: "Workspace" }) as HTMLSelectElement)
+        .value,
+    ).toBe(group);
+  });
+  it("cancels or confirms dataset deletion from the sidebar", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(
+      screen.getByRole("button", { name: /Try sample dataset/ }),
+    );
+    await user.click(
+      screen.getByRole("button", { name: `Delete dataset ${sample.name}` }),
+    );
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.getByRole("heading", { name: "answer-001" })).toBeTruthy();
+    await user.click(
+      screen.getByRole("button", { name: `Delete dataset ${sample.name}` }),
+    );
+    await user.click(screen.getByRole("button", { name: "Delete dataset" }));
+    expect(JSON.parse(localStorage.getItem(key)!).datasets).toHaveLength(0);
+    expect(window.location.pathname).toBe("/workspaces/default");
+  });
+  it("deletes a workspace while moving its labeled dataset to another workspace", async () => {
+    const user = userEvent.setup();
+    const dataset = structuredClone(sample);
+    dataset.annotations = {
+      "answer-001": { values: { correct: false, helpfulness: 3 } },
+    };
+    localStorage.setItem(
+      key,
+      JSON.stringify({
+        datasets: [dataset],
+        positions: {},
+        workspaces: [
+          { id: "default", name: "Default Workspace" },
+          { id: "review", name: "Review" },
+        ],
+        activeWorkspaceId: "review",
+        datasetWorkspaces: { [dataset.id]: "review" },
+      }),
+    );
+    window.history.replaceState(null, "", "/workspaces/review");
+    render(<App />);
+    await user.click(screen.getByRole("button", { name: "Manage" }));
+    await user.click(screen.getByRole("button", { name: "Delete workspace" }));
+    const state = JSON.parse(localStorage.getItem(key)!);
+    expect(state.workspaces).toHaveLength(1);
+    expect(state.datasetWorkspaces[dataset.id]).toBe("default");
+    expect(state.datasets[0].annotations).toEqual(dataset.annotations);
+    expect(window.location.pathname).toBe("/workspaces/default");
+  });
+});
+
+describe("workspace navigation and sample reuse", () => {
+  it("keeps sample datasets scoped to each workspace and supports browser history", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(
+      screen.getByRole("button", { name: /Try sample dataset/ }),
+    );
+    await user.click(screen.getByRole("button", { name: "Create workspace" }));
+    await user.type(
+      screen.getByRole("textbox", { name: "Workspace name" }),
+      "Second",
+    );
+    await user.click(
+      screen.getAllByRole("button", { name: "Create workspace" }).at(-1)!,
+    );
+    const secondId = (
+      screen.getByRole("combobox", { name: "Workspace" }) as HTMLSelectElement
+    ).value;
+    await user.click(
+      screen.getByRole("button", { name: /Try sample dataset/ }),
+    );
+    const state = JSON.parse(localStorage.getItem(key)!);
+    expect(state.datasets).toHaveLength(2);
+    expect(state.datasetWorkspaces[state.datasets[1].id]).toBe(secondId);
+    await user.selectOptions(
+      screen.getByRole("combobox", { name: "Workspace" }),
+      "default",
+    );
+    await act(async () => {
+      window.history.back();
+    });
+    await waitFor(() =>
+      expect(
+        (
+          screen.getByRole("combobox", {
+            name: "Workspace",
+          }) as HTMLSelectElement
+        ).value,
+      ).toBe(secondId),
+    );
+    expect(screen.getByRole("heading", { name: "answer-001" })).toBeTruthy();
+  });
+});

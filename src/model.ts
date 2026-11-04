@@ -33,7 +33,11 @@ export type Dataset = {
   items: Item[];
   annotations?: Record<string, Annotation>;
 };
+export type WorkspaceGroup = { id: string; name: string };
 export type Workspace = {
+  workspaces: WorkspaceGroup[];
+  activeWorkspaceId: string;
+  datasetWorkspaces: Record<string, string>;
   datasets: Dataset[];
   activeId: string;
   positions: Record<string, number>;

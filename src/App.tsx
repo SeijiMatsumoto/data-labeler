@@ -36,6 +36,13 @@ import {
   type Field,
   type Block,
 } from "./model";
+import {
+  emptyWorkspace,
+  normalizeWorkspace,
+  mergeBackup,
+  deleteDataset,
+  deleteWorkspace,
+} from "./workspaces";
 import "./style.css";
 const KEY = "labeldesk.workspace.v1";
 function read(): { workspace: Workspace; error: string } {
@@ -46,17 +53,17 @@ function read(): { workspace: Workspace; error: string } {
       if (!Array.isArray(w.datasets) || !w.positions)
         throw Error("Invalid workspace");
       w.datasets.forEach(validate);
-      return { workspace: w, error: "" };
+      return { workspace: normalizeWorkspace(w), error: "" };
     }
   } catch {
     return {
-      workspace: { datasets: [], activeId: "", positions: {} },
+      workspace: emptyWorkspace(),
       error:
         "Saved workspace could not be read. Import a backup to restore it; storage will not be replaced until you make a change.",
     };
   }
   return {
-    workspace: { datasets: [], activeId: "", positions: {} },
+    workspace: emptyWorkspace(),
     error: "",
   };
 }
@@ -124,6 +131,7 @@ function WorkspaceApp() {
   const location = useLocation();
   const navigate = useNavigate();
   const exampleRoute = useMatch("/datasets/:datasetId/examples/:itemId");
+  const workspaceRoute = useMatch("/workspaces/:workspaceId");
   const datasetRoute = useMatch("/datasets/:datasetId");
   const route: { params: { datasetId?: string; itemId?: string } } | null =
     exampleRoute || datasetRoute;
@@ -148,15 +156,47 @@ function WorkspaceApp() {
     [advanced, setAdvanced] = useState(false),
     [rubricJson, setRubricJson] = useState(""),
     [rubricError, setRubricError] = useState(""),
-    [sideBySide, setSideBySide] = useState(false);
+    [sideBySide, setSideBySide] = useState(false),
+    [workspaceName, setWorkspaceName] = useState(""),
+    [workspaceError, setWorkspaceError] = useState(""),
+    [moveTarget, setMoveTarget] = useState(""),
+    [importWorkspaceId, setImportWorkspaceId] = useState(
+      initial.workspace.activeWorkspaceId,
+    );
   const panel = new URLSearchParams(location.search).get("panel");
-  const modal = ["import", "export", "rubric", "prompt"].includes(panel || "")
-    ? (panel as "import" | "export" | "rubric" | "prompt")
+  const workspaceMode =
+    new URLSearchParams(location.search).get("action") === "create"
+      ? "create"
+      : "rename";
+  const modal = [
+    "import",
+    "export",
+    "rubric",
+    "prompt",
+    "workspace",
+    "delete-dataset",
+  ].includes(panel || "")
+    ? (panel as
+        | "import"
+        | "export"
+        | "rubric"
+        | "prompt"
+        | "workspace"
+        | "delete-dataset")
     : null;
   const setModal = (
-    value: "import" | "export" | "rubric" | "prompt" | null,
+    value:
+      | "import"
+      | "export"
+      | "rubric"
+      | "prompt"
+      | "workspace"
+      | "delete-dataset"
+      | null,
   ) => {
     const params = new URLSearchParams(location.search);
+    if (value !== "delete-dataset") params.delete("dataset");
+    if (value !== "workspace") params.delete("action");
     if (value) params.set("panel", value);
     else params.delete("panel");
     const search = params.toString();
@@ -221,11 +261,57 @@ function WorkspaceApp() {
       : 0,
     item = d?.items[index],
     a = item ? d?.annotations?.[item.id] : undefined;
+  const activeWorkspaceId = d
+    ? w.datasetWorkspaces[d.id]
+    : workspaceRoute?.params.workspaceId || w.activeWorkspaceId;
+  const activeWorkspace =
+    w.workspaces.find((g) => g.id === activeWorkspaceId) || w.workspaces[0];
+  const workspaceDatasets = w.datasets.filter(
+    (dataset) => w.datasetWorkspaces[dataset.id] === activeWorkspace.id,
+  );
+  const workspacePath = (id: string) => `/workspaces/${encodeURIComponent(id)}`;
+  const deletingDataset = w.datasets.find(
+    (dataset) =>
+      dataset.id === new URLSearchParams(location.search).get("dataset"),
+  );
+  const requestDeleteDataset = (id: string) => {
+    const params = new URLSearchParams(location.search);
+    params.set("panel", "delete-dataset");
+    params.set("dataset", id);
+    navigate({ pathname: location.pathname, search: `?${params}` });
+  };
+  const openWorkspace = (mode: "create" | "rename") => {
+    setWorkspaceName(mode === "rename" ? activeWorkspace.name : "");
+    setWorkspaceError("");
+    setMoveTarget(
+      w.workspaces.find((g) => g.id !== activeWorkspace.id)?.id || "",
+    );
+    const params = new URLSearchParams(location.search);
+    params.set("panel", "workspace");
+    params.set("action", mode);
+    params.delete("dataset");
+    navigate({ pathname: location.pathname, search: `?${params}` });
+  };
+  useEffect(() => {
+    if (modal !== "workspace") return;
+    setWorkspaceName(workspaceMode === "rename" ? activeWorkspace.name : "");
+    setWorkspaceError("");
+    setMoveTarget(
+      w.workspaces.find((g) => g.id !== activeWorkspace.id)?.id || "",
+    );
+  }, [modal, workspaceMode, activeWorkspace.id, activeWorkspace.name]);
+  useEffect(() => {
+    if (w.activeWorkspaceId === activeWorkspace.id) return;
+    dirty.current = true;
+    setW((old) => ({ ...old, activeWorkspaceId: activeWorkspace.id }));
+  }, [activeWorkspace.id, w.activeWorkspaceId]);
   const notFound =
     location.pathname !== "/" &&
-    (!route ||
-      !d ||
-      (route.params.itemId &&
+    ((workspaceRoute
+      ? !w.workspaces.some((g) => g.id === workspaceRoute.params.workspaceId)
+      : !route || !d) ||
+      (route?.params.itemId &&
+        d &&
         !d.items.some((item) => item.id === route.params.itemId)));
   useEffect(() => {
     setPending(null);
@@ -376,8 +462,13 @@ function WorkspaceApp() {
     if (!copy) {
       const existing = w.datasets.find((x) => x.id === data.id);
       if (existing) {
-        navigate(datasetPath(existing, w.positions[existing.id] || 0));
-        return;
+        const target =
+          modal === "import" ? importWorkspaceId : activeWorkspace.id;
+        if (w.datasetWorkspaces[existing.id] === target) {
+          navigate(datasetPath(existing, w.positions[existing.id] || 0));
+          return;
+        }
+        copy = true;
       }
     }
     let result = structuredClone(data);
@@ -390,6 +481,11 @@ function WorkspaceApp() {
       datasets: [...old.datasets, result],
       activeId: result.id,
       positions: { ...old.positions, [result.id]: 0 },
+      datasetWorkspaces: {
+        ...old.datasetWorkspaces,
+        [result.id]:
+          modal === "import" ? importWorkspaceId : activeWorkspace.id,
+      },
     }));
     setPending(null);
     setModal(null);
@@ -398,8 +494,10 @@ function WorkspaceApp() {
     navigate(datasetPath(result));
   };
   const openImport = () => {
+    setImportWorkspaceId(activeWorkspace.id);
     setPending(null);
     setBackup(null);
+    setBackupData(null);
     setImportError("");
     setImportText("");
     setModal("import");
@@ -407,21 +505,17 @@ function WorkspaceApp() {
   const loadText = (text: string) => {
     setPending(null);
     setBackup(null);
+    setBackupData(null);
     setImportError("");
     setImportText(text);
+    if (modal !== "import") setImportWorkspaceId(activeWorkspace.id);
     setModal("import");
     try {
       const parsed = JSON.parse(text);
       if (parsed && parsed.format === "labeldesk-workspace/1") {
-        if (!Array.isArray(parsed.datasets) || !parsed.datasets.length)
-          throw Error("Backup has no datasets.");
-        parsed.datasets.forEach(validate);
-        setBackup(parsed.datasets);
-        setBackupPositions(
-          parsed.positions && typeof parsed.positions === "object"
-            ? parsed.positions
-            : {},
-        );
+        const normalized = normalizeWorkspace(parsed);
+        setBackup(normalized.datasets);
+        setBackupData(parsed);
       } else setPending(validate(parsed));
     } catch (e) {
       setImportError(e instanceof Error ? e.message : "Unable to read JSON.");
@@ -437,9 +531,7 @@ function WorkspaceApp() {
   };
   const dragDepth = useRef(0);
   const [backup, setBackup] = useState<Dataset[] | null>(null);
-  const [backupPositions, setBackupPositions] = useState<
-    Record<string, number>
-  >({});
+  const [backupData, setBackupData] = useState<any>(null);
   const copyPrompt = async () => {
     try {
       await navigator.clipboard.writeText(generatorPrompt);
@@ -490,14 +582,38 @@ function WorkspaceApp() {
         }}
       />
       <aside className="sidebar" inert={!!modal}>
-        <Link className="brand" to="/">
+        <Link className="brand" to={workspacePath(activeWorkspace.id)}>
           <span className="brand-icon">
             <Database size={19} />
           </span>
           labeldesk<span className="local-badge">LOCAL</span>
         </Link>
+        <label className="workspace-picker">
+          Workspace
+          <select
+            aria-label="Workspace"
+            value={activeWorkspace.id}
+            onChange={(e) => {
+              change((old) => ({ ...old, activeWorkspaceId: e.target.value }));
+              navigate(workspacePath(e.target.value));
+            }}
+          >
+            {w.workspaces.map((group) => (
+              <option key={group.id} value={group.id}>
+                {group.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <div className="workspace-tools">
+          <button onClick={() => openWorkspace("create")}>
+            <Plus size={13} />
+            Create workspace
+          </button>
+          <button onClick={() => openWorkspace("rename")}>Manage</button>
+        </div>
         <div className="workspace-title">
-          YOUR WORKSPACE{" "}
+          DATASETS{" "}
           <button
             className="icon"
             aria-label="Import dataset"
@@ -506,19 +622,31 @@ function WorkspaceApp() {
             <Plus size={17} />
           </button>
         </div>
+        {!workspaceDatasets.length && (
+          <p className="workspace-empty">No datasets in this workspace yet.</p>
+        )}
         <div className="dataset-list">
-          {w.datasets.map((x) => (
-            <Link
-              key={x.id}
-              className={`dataset ${x.id === d?.id ? "active" : ""}`}
-              to={datasetPath(x, w.positions[x.id] || 0)}
-            >
-              <Database size={16} />
-              <span>
-                {x.name}
-                <small>{x.items.length} examples</small>
-              </span>
-            </Link>
+          {workspaceDatasets.map((x) => (
+            <div className="dataset-entry" key={x.id}>
+              <Link
+                key={x.id}
+                className={`dataset ${x.id === d?.id ? "active" : ""}`}
+                to={datasetPath(x, w.positions[x.id] || 0)}
+              >
+                <Database size={16} />
+                <span>
+                  {x.name}
+                  <small>{x.items.length} examples</small>
+                </span>
+              </Link>
+              <button
+                className="dataset-delete icon"
+                aria-label={`Delete dataset ${x.name}`}
+                onClick={() => requestDeleteDataset(x.id)}
+              >
+                <Trash2 size={14} />
+              </button>
+            </div>
           ))}
         </div>
         <button className="import-side" onClick={openImport}>
@@ -591,6 +719,9 @@ function WorkspaceApp() {
                     format: "labeldesk-workspace/1",
                     datasets: w.datasets,
                     positions: w.positions,
+                    workspaces: w.workspaces,
+                    datasetWorkspaces: w.datasetWorkspaces,
+                    activeWorkspaceId: w.activeWorkspaceId,
                   },
                   null,
                   2,
@@ -609,7 +740,10 @@ function WorkspaceApp() {
       <main inert={!!modal}>
         <header>
           <div className="breadcrumb">
-            <Link to="/">Workspace</Link> <span>/</span>
+            <Link to={workspacePath(activeWorkspace.id)}>
+              {activeWorkspace.name}
+            </Link>{" "}
+            <span>/</span>
             <strong>{d?.name || "Get started"}</strong>
           </div>
           <div className="header-actions">
@@ -1013,13 +1147,19 @@ function WorkspaceApp() {
           >
             <div className="modal-title">
               <h2>
-                {modal === "import"
-                  ? "Import dataset"
-                  : modal === "export"
-                    ? "Export your work"
-                    : modal === "rubric"
-                      ? "Configure rubric"
-                      : "Dataset generation prompt"}
+                {modal === "workspace"
+                  ? workspaceMode === "create"
+                    ? "Create workspace"
+                    : "Manage workspace"
+                  : modal === "delete-dataset"
+                    ? "Delete dataset"
+                    : modal === "import"
+                      ? "Import dataset"
+                      : modal === "export"
+                        ? "Export your work"
+                        : modal === "rubric"
+                          ? "Configure rubric"
+                          : "Dataset generation prompt"}
               </h2>
               <button
                 autoFocus
@@ -1034,6 +1174,157 @@ function WorkspaceApp() {
                 <X size={20} />
               </button>
             </div>
+            {modal === "import" && !backupData?.workspaces && (
+              <label className="workspace-picker import-workspace">
+                Assign dataset to workspace
+                <select
+                  aria-label="Import workspace"
+                  value={importWorkspaceId}
+                  onChange={(e) => setImportWorkspaceId(e.target.value)}
+                >
+                  {w.workspaces.map((group) => (
+                    <option key={group.id} value={group.id}>
+                      {group.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+            {modal === "workspace" && (
+              <>
+                <label className="workspace-name-label">
+                  Workspace name
+                  <input
+                    autoFocus
+                    aria-label="Workspace name"
+                    value={workspaceName}
+                    onChange={(e) => {
+                      setWorkspaceName(e.target.value);
+                      setWorkspaceError("");
+                    }}
+                  />
+                </label>
+                {workspaceError && (
+                  <p role="alert" className="rubric-error">
+                    {workspaceError}
+                  </p>
+                )}
+                <div className="modal-actions">
+                  <button
+                    className="button dark"
+                    onClick={() => {
+                      const name = workspaceName.trim();
+                      if (!name) {
+                        setWorkspaceError("Enter a workspace name.");
+                        return;
+                      }
+                      if (
+                        w.workspaces.some(
+                          (group) =>
+                            group.name.toLowerCase() === name.toLowerCase() &&
+                            (workspaceMode === "create" ||
+                              group.id !== activeWorkspace.id),
+                        )
+                      ) {
+                        setWorkspaceError(
+                          "A workspace with this name already exists.",
+                        );
+                        return;
+                      }
+                      const id =
+                        workspaceMode === "create"
+                          ? `workspace-${crypto.randomUUID()}`
+                          : activeWorkspace.id;
+                      change((old) => ({
+                        ...old,
+                        workspaces:
+                          workspaceMode === "create"
+                            ? [...old.workspaces, { id, name }]
+                            : old.workspaces.map((group) =>
+                                group.id === id ? { ...group, name } : group,
+                              ),
+                        activeWorkspaceId: id,
+                      }));
+                      setModal(null);
+                      if (workspaceMode === "create")
+                        navigate(workspacePath(id));
+                    }}
+                  >
+                    {workspaceMode === "create"
+                      ? "Create workspace"
+                      : "Save workspace name"}
+                  </button>
+                </div>
+                {workspaceMode === "rename" && (
+                  <div className="workspace-danger">
+                    <h3>Delete workspace</h3>
+                    <p>
+                      {w.workspaces.length === 1
+                        ? "Keep at least one workspace. Create another workspace before deleting this one."
+                        : `The ${workspaceDatasets.length} dataset(s) in this workspace will be moved to the workspace you choose, keeping their labels.`}
+                    </p>
+                    {w.workspaces.length > 1 && (
+                      <label className="workspace-picker">
+                        Move datasets to
+                        <select
+                          aria-label="Move datasets to"
+                          value={moveTarget}
+                          onChange={(e) => setMoveTarget(e.target.value)}
+                        >
+                          {w.workspaces
+                            .filter((group) => group.id !== activeWorkspace.id)
+                            .map((group) => (
+                              <option key={group.id} value={group.id}>
+                                {group.name}
+                              </option>
+                            ))}
+                        </select>
+                      </label>
+                    )}
+                    <button
+                      className="button delete-action"
+                      disabled={w.workspaces.length === 1}
+                      onClick={() => {
+                        change((old) =>
+                          deleteWorkspace(old, activeWorkspace.id, moveTarget),
+                        );
+                        setModal(null);
+                        navigate(workspacePath(moveTarget));
+                      }}
+                    >
+                      Delete workspace
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
+            {modal === "delete-dataset" && (
+              <>
+                <p>
+                  {deletingDataset
+                    ? `Delete “${deletingDataset.name}” and its labels from this browser? This cannot be undone. Download a backup first if you need to keep them.`
+                    : "This dataset has already been deleted."}
+                </p>
+                <div className="modal-actions">
+                  <button className="button" onClick={() => setModal(null)}>
+                    Cancel
+                  </button>
+                  {deletingDataset && (
+                    <button
+                      className="button delete-action"
+                      onClick={() => {
+                        change((old) => deleteDataset(old, deletingDataset.id));
+                        setModal(null);
+                        if (d?.id === deletingDataset.id)
+                          navigate(workspacePath(activeWorkspace.id));
+                      }}
+                    >
+                      Delete dataset
+                    </button>
+                  )}
+                </div>
+              </>
+            )}
             {modal === "import" && !pending && !backup && (
               <div className="import-inputs">
                 <p>
@@ -1098,40 +1389,31 @@ function WorkspaceApp() {
                 <>
                   <p>
                     This backup contains {backup.length} datasets. Restore adds
-                    them to your workspace; conflicting IDs are imported as
-                    copies.
+                    them to your saved data; conflicting IDs are imported as
+                    copies. Named workspaces and their dataset assignments are
+                    preserved. Older backups use the selected workspace.
                   </p>
                   <button
                     className="button dark"
                     onClick={() => {
-                      const used = new Set(w.datasets.map((x) => x.id));
-                      const restoredPositions: Record<string, number> = {};
-                      const datasets = backup.map((x) => {
-                        const c = structuredClone(x);
-                        if (used.has(c.id)) {
-                          c.id += `-copy-${crypto.randomUUID()}`;
-                          c.name += " (copy)";
-                        }
-                        used.add(c.id);
-                        const position = backupPositions[x.id];
-                        restoredPositions[c.id] = Number.isInteger(position)
-                          ? Math.max(0, Math.min(position, c.items.length - 1))
-                          : 0;
-                        return c;
-                      });
-                      change((old) => ({
-                        ...old,
-                        datasets: [...old.datasets, ...datasets],
-                        activeId: datasets[0].id,
-                        positions: { ...old.positions, ...restoredPositions },
-                      }));
+                      const restored = mergeBackup(
+                        w,
+                        backupData,
+                        importWorkspaceId,
+                      );
+                      change(() => restored);
                       setBackup(null);
                       setModal(null);
+                      const first = restored.datasets.find(
+                        (dataset) => dataset.id === restored.activeId,
+                      );
                       navigate(
-                        datasetPath(
-                          datasets[0],
-                          restoredPositions[datasets[0].id],
-                        ),
+                        first
+                          ? datasetPath(
+                              first,
+                              restored.positions[first.id] || 0,
+                            )
+                          : workspacePath(restored.activeWorkspaceId),
                       );
                     }}
                   >
@@ -1281,22 +1563,7 @@ function WorkspaceApp() {
                 </p>
                 <button
                   className="text-button danger"
-                  onClick={() => {
-                    if (
-                      confirm(
-                        `Remove “${d.name}” and its labels from this browser? Export a backup first if you need them.`,
-                      )
-                    ) {
-                      change((old) => ({
-                        ...old,
-                        datasets: old.datasets.filter((x) => x.id !== d.id),
-                        activeId:
-                          old.datasets.find((x) => x.id !== d.id)?.id || "",
-                      }));
-                      setModal(null);
-                      navigate("/");
-                    }
-                  }}
+                  onClick={() => requestDeleteDataset(d.id)}
                 >
                   <Trash2 size={14} /> Remove dataset from this browser
                 </button>

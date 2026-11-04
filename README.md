@@ -26,9 +26,17 @@ npm run build
 
 Keyboard shortcuts when not editing a form control: left/right navigate; up/down select scoring field; 1–9 pick a scoring option; N goes to the next unlabeled example. For a binary field, 1 = Yes and 2 = No. An item is complete when required fields are answered and at least one field has an answer. Skip preserves existing answers.
 
+## Workspaces
+
+Use the sidebar dropdown to switch workspaces. **Create workspace** adds a named group; **Manage** renames it or deletes it after choosing another workspace for its datasets. At least one workspace is kept. Deleting a workspace preserves datasets and annotations by moving them to the chosen destination.
+
+Existing local data automatically belongs to **Default Workspace**. Imports show a workspace assignment selector, and the sample belongs to the current workspace. Each sidebar dataset has a delete button with confirmation; deleting it also removes its labels and saved position.
+
+Backups include every workspace, dataset assignment, annotation, and saved position. Restoring a named backup preserves its groups, importing conflicting dataset IDs as copies. Older backups are assigned to the selected workspace.
+
 ## Navigation
 
-The workspace home is `/`. Each example has a bookmarkable URL, `/datasets/:datasetId/examples/:itemId`. Dataset links resume the last reviewed example, and `/datasets/:datasetId` also opens the saved position. Rubric and export panels use `?panel=rubric` and `?panel=export`. Browser Back/Forward restores these views without undoing annotations. Refreshing a deep link restores the same example from localStorage. Links require the dataset to exist in that browser; import a dataset or workspace backup on another browser first.
+The workspace home is `/`, and each named workspace has a `/workspaces/:workspaceId` URL. Each example has a bookmarkable URL, `/datasets/:datasetId/examples/:itemId`. Dataset links resume the last reviewed example, and `/datasets/:datasetId` also opens the saved position. Rubric and export panels use `?panel=rubric` and `?panel=export`. Browser Back/Forward restores these views without undoing annotations. Refreshing a deep link restores the same example from localStorage. Links require the dataset to exist in that browser; import a dataset or workspace backup on another browser first.
 
 ## Dataset contract
 
