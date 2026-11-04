@@ -562,3 +562,43 @@ describe("workspace navigation and sample reuse", () => {
     expect(screen.getByRole("heading", { name: "answer-001" })).toBeTruthy();
   });
 });
+
+describe("workspace form submission", () => {
+  it("creates and renames a workspace with Enter", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(screen.getByRole("button", { name: "Create workspace" }));
+    await user.type(
+      screen.getByRole("textbox", { name: "Workspace name" }),
+      "Keyboard review{Enter}",
+    );
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(
+      (screen.getByRole("combobox", { name: "Workspace" }) as HTMLSelectElement)
+        .selectedOptions[0].textContent,
+    ).toBe("Keyboard review");
+    await user.click(screen.getByRole("button", { name: "Manage" }));
+    const input = screen.getByRole("textbox", { name: "Workspace name" });
+    await user.clear(input);
+    await user.type(input, "Renamed with Enter{Enter}");
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(
+      (screen.getByRole("combobox", { name: "Workspace" }) as HTMLSelectElement)
+        .selectedOptions[0].textContent,
+    ).toBe("Renamed with Enter");
+  });
+  it("applies name validation when submitting with Enter", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(screen.getByRole("button", { name: "Create workspace" }));
+    const input = screen.getByRole("textbox", { name: "Workspace name" });
+    await user.type(input, " {Enter}");
+    expect(screen.getByRole("alert").textContent).toContain(
+      "Enter a workspace name",
+    );
+    await user.clear(input);
+    await user.type(input, "Default Workspace{Enter}");
+    expect(screen.getByRole("alert").textContent).toContain("already exists");
+    expect(screen.getByRole("dialog", { name: "workspace" })).toBeTruthy();
+  });
+});

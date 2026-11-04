@@ -1192,69 +1192,70 @@ function WorkspaceApp() {
             )}
             {modal === "workspace" && (
               <>
-                <label className="workspace-name-label">
-                  Workspace name
-                  <input
-                    autoFocus
-                    aria-label="Workspace name"
-                    value={workspaceName}
-                    onChange={(e) => {
-                      setWorkspaceName(e.target.value);
-                      setWorkspaceError("");
-                    }}
-                  />
-                </label>
-                {workspaceError && (
-                  <p role="alert" className="rubric-error">
-                    {workspaceError}
-                  </p>
-                )}
-                <div className="modal-actions">
-                  <button
-                    className="button dark"
-                    onClick={() => {
-                      const name = workspaceName.trim();
-                      if (!name) {
-                        setWorkspaceError("Enter a workspace name.");
-                        return;
-                      }
-                      if (
-                        w.workspaces.some(
-                          (group) =>
-                            group.name.toLowerCase() === name.toLowerCase() &&
-                            (workspaceMode === "create" ||
-                              group.id !== activeWorkspace.id),
-                        )
-                      ) {
-                        setWorkspaceError(
-                          "A workspace with this name already exists.",
-                        );
-                        return;
-                      }
-                      const id =
+                <form
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    const name = workspaceName.trim();
+                    if (!name) {
+                      setWorkspaceError("Enter a workspace name.");
+                      return;
+                    }
+                    if (
+                      w.workspaces.some(
+                        (group) =>
+                          group.name.toLowerCase() === name.toLowerCase() &&
+                          (workspaceMode === "create" ||
+                            group.id !== activeWorkspace.id),
+                      )
+                    ) {
+                      setWorkspaceError(
+                        "A workspace with this name already exists.",
+                      );
+                      return;
+                    }
+                    const id =
+                      workspaceMode === "create"
+                        ? `workspace-${crypto.randomUUID()}`
+                        : activeWorkspace.id;
+                    change((old) => ({
+                      ...old,
+                      workspaces:
                         workspaceMode === "create"
-                          ? `workspace-${crypto.randomUUID()}`
-                          : activeWorkspace.id;
-                      change((old) => ({
-                        ...old,
-                        workspaces:
-                          workspaceMode === "create"
-                            ? [...old.workspaces, { id, name }]
-                            : old.workspaces.map((group) =>
-                                group.id === id ? { ...group, name } : group,
-                              ),
-                        activeWorkspaceId: id,
-                      }));
-                      setModal(null);
-                      if (workspaceMode === "create")
-                        navigate(workspacePath(id));
-                    }}
-                  >
-                    {workspaceMode === "create"
-                      ? "Create workspace"
-                      : "Save workspace name"}
-                  </button>
-                </div>
+                          ? [...old.workspaces, { id, name }]
+                          : old.workspaces.map((group) =>
+                              group.id === id ? { ...group, name } : group,
+                            ),
+                      activeWorkspaceId: id,
+                    }));
+                    setModal(null);
+                    if (workspaceMode === "create") navigate(workspacePath(id));
+                  }}
+                >
+                  <label className="workspace-name-label">
+                    Workspace name
+                    <input
+                      autoFocus
+                      aria-label="Workspace name"
+                      value={workspaceName}
+                      onChange={(e) => {
+                        setWorkspaceName(e.target.value);
+                        setWorkspaceError("");
+                      }}
+                    />
+                  </label>
+                  {workspaceError && (
+                    <p role="alert" className="rubric-error">
+                      {workspaceError}
+                    </p>
+                  )}
+                  <div className="modal-actions">
+                    <button className="button dark" type="submit">
+                      {workspaceMode === "create"
+                        ? "Create workspace"
+                        : "Save workspace name"}
+                    </button>
+                  </div>
+                </form>
                 {workspaceMode === "rename" && (
                   <div className="workspace-danger">
                     <h3>Delete workspace</h3>
