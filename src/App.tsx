@@ -586,7 +586,7 @@ function WorkspaceApp() {
           <span className="brand-icon">
             <Database size={19} />
           </span>
-          labeldesk<span className="local-badge">LOCAL</span>
+          Labeldesk<span className="local-badge">Local</span>
         </Link>
         <label className="workspace-picker">
           Workspace
@@ -613,7 +613,7 @@ function WorkspaceApp() {
           <button onClick={() => openWorkspace("rename")}>Manage</button>
         </div>
         <div className="workspace-title">
-          DATASETS{" "}
+          Datasets{" "}
           <button
             className="icon"
             aria-label="Import dataset"
@@ -656,7 +656,7 @@ function WorkspaceApp() {
           <>
             <div className="sidebar-divider" />
             <div className="workspace-title">
-              EXAMPLES <span>{total}</span>
+              Examples <span>{total}</span>
             </div>
             <label className="search">
               <Search size={15} />
@@ -803,15 +803,10 @@ function WorkspaceApp() {
                   file.
                 </p>
               )}
-              <div className="eyebrow">LESS FRICTION. BETTER GROUND TRUTH.</div>
-              <h1>
-                A little focus.
-                <br />A better dataset.
-              </h1>
+              <h1>Label your dataset.</h1>
               <p>
-                Give your examples the attention they deserve.
-                <br />
-                Import a dataset, make your judgments, and keep moving.
+                Import your examples, choose a rubric, and review them one at a
+                time. Your work is saved in this browser.
               </p>
               <div className="welcome-actions">
                 <button className="button dark" onClick={openImport}>
@@ -823,24 +818,21 @@ function WorkspaceApp() {
               </div>
               <div className="welcome-cards">
                 <article>
-                  <span>01</span>
-                  <h3>Bring your examples</h3>
+                  <h3>Prepare your dataset</h3>
                   <p>
                     Prompts, conversations, structured outputs, and references
                     in one simple format.
                   </p>
                 </article>
                 <article>
-                  <span>02</span>
-                  <h3>Label your way</h3>
+                  <h3>Set the rubric</h3>
                   <p>
                     Binary decisions, anchored scales, choices, and notes
                     tailored to your evaluation.
                   </p>
                 </article>
                 <article>
-                  <span>03</span>
-                  <h3>Take it with you</h3>
+                  <h3>Export your labels</h3>
                   <p>
                     Autosaved in your browser. Export JSON or CSV whenever
                     you’re ready.
@@ -876,7 +868,7 @@ function WorkspaceApp() {
             <>
               <div className="dataset-heading">
                 <div>
-                  <div className="eyebrow">LABELING SESSION</div>
+                  <div className="eyebrow">Labeling session</div>
                   <h1>{d.name}</h1>
                 </div>
                 <div className="progress-summary">
@@ -892,9 +884,9 @@ function WorkspaceApp() {
                 <div className="reader" ref={reader}>
                   <div className="example-heading">
                     <span className="eyebrow">
-                      EXAMPLE {String(index + 1).padStart(2, "0")}{" "}
+                      Example {String(index + 1).padStart(2, "0")}{" "}
                       <span className="muted">
-                        OF {String(total).padStart(2, "0")}
+                        of {String(total).padStart(2, "0")}
                       </span>
                     </span>
                     <span
@@ -926,7 +918,7 @@ function WorkspaceApp() {
                 </div>
                 <aside className="scoring">
                   <div className="scoring-head">
-                    <span className="eyebrow">YOUR EVALUATION</span>
+                    <span className="eyebrow">Your evaluation</span>
                     <span>
                       {
                         d.rubric.filter((f) => validValue(f, a?.values[f.id]))
