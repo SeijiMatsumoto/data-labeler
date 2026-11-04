@@ -1,0 +1,101 @@
+{
+  "schemaVersion": "1.0",
+  "id": "demo-answer-quality",
+  "name": "Answer quality · sample",
+  "instructions": "Read the prompt and response. Score correctness and helpfulness independently. Use the reference when provided.",
+  "rubric": [
+    {
+      "id": "correct",
+      "label": "Factually correct",
+      "type": "binary",
+      "required": true,
+      "description": "Does the response give an accurate answer?"
+    },
+    {
+      "id": "helpfulness",
+      "label": "Helpfulness",
+      "type": "likert",
+      "min": 1,
+      "max": 5,
+      "anchors": {
+        "1": "Not useful",
+        "3": "Partially useful",
+        "5": "Fully useful"
+      },
+      "required": true
+    },
+    {
+      "id": "comment",
+      "label": "Reviewer notes",
+      "type": "text",
+      "required": false
+    }
+  ],
+  "items": [
+    {
+      "id": "answer-001",
+      "blocks": [
+        {
+          "label": "Prompt",
+          "type": "text",
+          "value": "Why does bread rise when you add yeast?"
+        },
+        {
+          "label": "Response",
+          "type": "markdown",
+          "value": "Yeast consumes sugars in the dough and produces **carbon dioxide** through fermentation. The dough’s gluten network traps that gas, creating bubbles that make the dough expand.\n\nDuring baking, heat expands the gas and sets the structure, giving bread its airy texture."
+        }
+      ],
+      "metadata": {
+        "category": "science",
+        "difficulty": "easy"
+      }
+    },
+    {
+      "id": "answer-002",
+      "blocks": [
+        {
+          "label": "Prompt",
+          "type": "text",
+          "value": "Return the three primary colors of light as JSON."
+        },
+        {
+          "label": "Response",
+          "type": "json",
+          "value": {
+            "colors": ["red", "yellow", "blue"]
+          }
+        },
+        {
+          "label": "Reference",
+          "type": "text",
+          "value": "The additive primary colors of light are red, green, and blue."
+        }
+      ]
+    },
+    {
+      "id": "answer-003",
+      "blocks": [
+        {
+          "label": "Conversation",
+          "type": "chat",
+          "value": [
+            {
+              "role": "user",
+              "content": "How do I reverse a list in Python without changing the original?"
+            },
+            {
+              "role": "assistant",
+              "content": "Use items.reverse(). This returns a reversed copy."
+            }
+          ]
+        },
+        {
+          "label": "Reference",
+          "type": "code",
+          "value": "reversed_items = items[::-1]\n# list.reverse() mutates the list and returns None."
+        }
+      ]
+    }
+  ]
+}

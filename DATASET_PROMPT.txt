@@ -1,0 +1,69 @@
+Generate a JSON dataset for Labeldesk, a local AI evaluation labeling app. Inspect this project's actual data and choose useful examples for human review. Ask me what to evaluate if the goal is unclear. Never invent source data or human labels. Do not include existing model scores in visible blocks unless I explicitly request them. Write a valid UTF-8 .json file and tell me its path.
+
+Required format:
+{
+  "schemaVersion": "1.0",
+  "id": "REPLACE_WITH_STABLE_DATASET_ID",
+  "name": "REPLACE_WITH_DATASET_NAME",
+  "instructions": "Read the prompt and response. Score correctness and helpfulness independently. Use the reference when provided.",
+  "rubric": [
+    {
+      "id": "correct",
+      "label": "Factually correct",
+      "type": "binary",
+      "required": true,
+      "description": "Does the response give an accurate answer?"
+    },
+    {
+      "id": "helpfulness",
+      "label": "Helpfulness",
+      "type": "likert",
+      "min": 1,
+      "max": 5,
+      "anchors": {
+        "1": "Not useful",
+        "3": "Partially useful",
+        "5": "Fully useful"
+      },
+      "required": true
+    },
+    {
+      "id": "comment",
+      "label": "Reviewer notes",
+      "type": "text",
+      "required": false
+    }
+  ],
+  "items": [
+    {
+      "id": "answer-001",
+      "blocks": [
+        {
+          "label": "Prompt",
+          "type": "text",
+          "value": "Why does bread rise when you add yeast?"
+        },
+        {
+          "label": "Response",
+          "type": "markdown",
+          "value": "Yeast consumes sugars in the dough and produces **carbon dioxide** through fermentation. The dough’s gluten network traps that gas, creating bubbles that make the dough expand.\n\nDuring baking, heat expands the gas and sets the structure, giving bread its airy texture."
+        }
+      ],
+      "metadata": {
+        "category": "science",
+        "difficulty": "easy"
+      }
+    }
+  ]
+}
+
+Schema rules:
+- schemaVersion is exactly "1.0". Dataset id and name are nonempty strings. instructions is optional text.
+- rubric is a nonempty array of fields with unique stable id, label, type, optional description, and required boolean.
+- Field types: binary (boolean answers); likert (integer min and max, min < max, at most 11 values, optional anchors mapping numbers to labels); text; single-select and multi-select (unique nonempty string options array). Use meaningful rubric descriptions and explicit scale anchors. Include an optional text comment field.
+- items is a nonempty array with unique stable string id and nonempty blocks array. Each block has label, type, value.
+- Block types: text, markdown, code (string value); json (any JSON value); chat (array of {"role":"user|assistant|system or other role","content":"string"}). Use multiple blocks for inputs, outputs, reference answers, or evidence. Preserve source text faithfully. Do not wrap arbitrary text in HTML.
+- Optional item metadata holds provenance and other context; it is collapsed in the UI. This app is text-based: do not embed large binary/base64 assets. Dataset must fit browser localStorage (typically a few MB).
+- Omit annotations for a fresh dataset. Never prefill human judgments.
+- Output JSON only in the file: no comments, fences, trailing commas, NaN, or undefined. Validate IDs, field types, and JSON before finishing.
+- If rubric choice is unclear, propose a small set of concrete dimensions suited to the evaluation. Prefer binary where the decision is binary; use Likert only with meaningful anchors.
