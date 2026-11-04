@@ -1,61 +1,95 @@
 # Labeldesk
 
-A local-first workspace for AI evaluation dataset labeling. Built with React, TypeScript, and Vite. No backend, analytics, remote fonts, or account required.
+Label AI evaluation datasets without working through raw JSON or Markdown files. Review one example at a time, score it with a rubric that fits your dataset, and export the results.
 
-## Run
+**[Open Labeldesk →](https://label-desk.vercel.app)**
 
-```sh
-npm install
-npm run dev
-```
+No account required. Your datasets and labels stay in your browser on your device.
 
-Open the localhost URL printed by Vite. Keep using the same origin (host and port): browser storage is origin-specific.
+## Get started
 
-```sh
-npm test
-npm run build
-```
+1. Open [label-desk.vercel.app](https://label-desk.vercel.app) and choose **Try sample dataset** to explore the labeling flow.
+2. Bring your own data with **Import dataset**. Drag and drop a JSON file, browse for a file, or paste JSON text. You can also drop a file anywhere in the app.
+3. Choose a workspace, preview the dataset, and select **Start labeling**.
+4. Review each example and fill in its scoring fields. Changes save automatically, so you can leave and resume later in the same browser.
+5. When you're finished, select **Export results**. You can also open **Export** at any time.
 
-## Workflow
+## Have your coding agent prepare the dataset
 
-1. Try the built-in sample or open Import dataset to drop a JSON file, browse files, or paste JSON text. Files can also be dropped anywhere in the app. Each option validates and previews the data before importing.
-2. Use **Copy dataset prompt** to ask a coding agent in another project to prepare data. The prompt includes the complete contract and example.
-3. Configure the rubric, review examples, and score. Every edit saves to localStorage.
-4. Export annotated JSON to resume later, labels-only JSON for evaluation scripts, or CSV for spreadsheets.
-5. Back up the workspace regularly. Browser data can be cleared; localStorage is typically limited to a few MB. Storage failures show a warning and leave current changes in memory for export.
+You don't need to write the input JSON by hand.
 
-Keyboard shortcuts when not editing a form control: left/right navigate; up/down select scoring field; 1–9 pick a scoring option; N goes to the next unlabeled example. For a binary field, 1 = Yes and 2 = No. An item is complete when required fields are answered and at least one field has an answer. Skip preserves existing answers.
+Click **Copy dataset prompt** in the sidebar, then paste it into a coding agent working in the project you want to evaluate. The prompt includes the expected JSON format, an example, and instructions for preparing reviewable data without prefilling human judgments.
 
-## Workspaces
+Give the agent your evaluation goal and tell it which outputs to include. Import the JSON file it generates into Labeldesk. You can also select **Download example JSON** on the home screen to see an example of the format.
 
-Use the sidebar dropdown to switch workspaces. **Create workspace** adds a named group; **Manage** renames it or deletes it after choosing another workspace for its datasets. At least one workspace is kept. Deleting a workspace preserves datasets and annotations by moving them to the chosen destination.
+## Choose how to score
 
-Existing local data automatically belongs to **Default Workspace**. Imports show a workspace assignment selector, and the sample belongs to the current workspace. Each sidebar dataset has a delete button with confirmation; deleting it also removes its labels and saved position.
+Each dataset has its own rubric. Open **Rubric** to adjust scoring instructions and fields:
 
-Backups include every workspace, dataset assignment, annotation, and saved position. Restoring a named backup preserves its groups, importing conflicting dataset IDs as copies. Older backups are assigned to the selected workspace.
+| Field           | Use it for                                                 |
+| --------------- | ---------------------------------------------------------- |
+| Binary          | Yes/no decisions, such as whether an answer is correct     |
+| Likert scale    | Numeric ratings with descriptions for what the scores mean |
+| Single select   | Choosing one category or outcome                           |
+| Multiple select | Selecting every applicable category                        |
+| Text            | Comments, observations, or explanations                    |
 
-## Navigation
+Fields can be required or optional. An example is complete once all required fields are answered and at least one field has an answer. **No** and a score of **0** count as answers.
 
-The workspace home is `/`, and each named workspace has a `/workspaces/:workspaceId` URL. Each example has a bookmarkable URL, `/datasets/:datasetId/examples/:itemId`. Dataset links resume the last reviewed example, and `/datasets/:datasetId` also opens the saved position. Rubric and export panels use `?panel=rubric` and `?panel=export`. Browser Back/Forward restores these views without undoing annotations. Refreshing a deep link restores the same example from localStorage. Links require the dataset to exist in that browser; import a dataset or workspace backup on another browser first.
+Use **Skip for now** to set an example aside without losing any scores you've already entered. **Next unlabeled** finds examples that still need attention. Once no unfinished examples remain, the button becomes **Export results**.
 
-## Dataset contract
+## Review comfortably
 
-The runtime validator and TypeScript types live in `src/model.ts`. Download the sample from the app or use the included `example.dataset.json`.
+Examples can include plain text, Markdown, formatted JSON, code, or chat conversations. Prompts, responses, references, and supporting context appear as separate reading blocks.
 
-- Envelope: `schemaVersion: "1.0"`, stable `id`, `name`, optional `instructions`, `rubric`, `items`.
-- Rubric fields: unique `id`, `label`, `type`, optional `required` and `description`.
-- Types: `binary`, `likert` (integer min < max; maximum 11 options; optional anchors), `text`, `single-select`, `multi-select` (string options).
-- Items: unique string `id`, nonempty `blocks`, optional `metadata`.
-- Blocks: `label`, `type`, `value`. Text, Markdown and code use strings; JSON accepts JSON values; chat uses an array of `{role, content}` strings.
-- Optional `annotations`: object keyed by item ID containing `values` keyed by rubric ID, optional `skipped`, `updatedAt`.
-- JSON exports use `null` for unanswered values, preserving `false` and `0`. CSV uses empty cells for unanswered values and JSON strings for multiple selections.
+- Use **Compare side by side** when reviewing multiple blocks together.
+- Search examples by ID or content, or filter by review status.
+- Expand **Source metadata** when you need provenance or extra context.
+- Use browser Back and Forward to return to previous views. You can bookmark individual examples, too.
 
-Rubric editor supports labels, descriptions, required flags, anchors, adding and removing fields. Ranges, scale anchors, and choice options can be edited directly. An advanced JSON editor is also available. Changing a field type or range must remain compatible with existing answers; the app validates before saving. Removing a field removes its annotations.
+Example links open your locally saved data. To use a link on another browser or device, import the dataset or a backup there first. Image and audio labeling aren't supported yet.
 
-Importing an existing dataset ID offers resume (keep saved data) or import as a copy. Backup restore merges datasets and copies conflicting IDs. Rendered Markdown uses no raw HTML and blocks remote images so imported content does not initiate image requests. This app targets text-based datasets; image/audio labeling is outside this version.
+### Keyboard shortcuts
 
-## Deploy to Vercel
+Shortcuts work when you aren't typing in a text field or choosing an option in a dropdown.
 
-`vercel.json` configures the Vite build and SPA fallback so dataset/example URLs work on direct visits and refreshes. Run `vercel --prod` from this directory with the Vercel CLI authenticated.
+| Key                     | Action                                                                    |
+| ----------------------- | ------------------------------------------------------------------------- |
+| Left / Right arrow      | Previous / next example                                                   |
+| Up / Down arrow         | Select a scoring field                                                    |
+| 1–9                     | Choose an option in the selected scoring field                            |
+| 1 / 2 on a binary field | Yes / No                                                                  |
+| N                       | Go to the next unfinished example, or open export when review is complete |
+| Enter / Return          | Submit a create or rename workspace form                                  |
+| Escape                  | Close a dialog                                                            |
 
-Datasets and annotations remain in browser localStorage. The hosted URL has separate storage from localhost: export a workspace backup locally and import it on the hosted app to carry your labels over.
+## Organize datasets into workspaces
+
+Start in **Default Workspace**, or select **Create workspace** to group datasets by project, experiment, or review session. Switch groups with the workspace dropdown in the sidebar.
+
+- **Manage** lets you rename the current workspace.
+- Every imported dataset is assigned to a workspace you choose.
+- Deleting a workspace moves its datasets and labels into another workspace you select. At least one workspace must remain.
+- Each dataset has a delete button in the sidebar. Deleting a dataset removes it and its labels from this browser after confirmation.
+
+## Export your labels
+
+Open **Export** and choose the format that fits your next step:
+
+| Format           | What you get                                                                                |
+| ---------------- | ------------------------------------------------------------------------------------------- |
+| Annotated JSON   | The dataset, rubric, labels, and review states. Import it again to resume labeling.         |
+| Labels-only JSON | Labels keyed by example ID, together with the scoring rubric, for your evaluation workflow. |
+| CSV              | One row per example, with scoring fields as columns, for a spreadsheet.                     |
+
+You can export all examples or only completed ones. Unanswered fields are `null` in JSON and empty cells in CSV.
+
+If you import a dataset that's already saved, choose **Resume saved dataset** to keep your existing work or **Import as copy** to review the new file separately.
+
+## Keep a backup
+
+Click **Back up workspace** to download all your workspaces, dataset assignments, labels, and saved positions. Restore a backup through **Import dataset**. Restoring adds to your saved data and imports conflicting dataset IDs as copies.
+
+Your work is stored in your browser's local storage. It isn't synced across browsers or devices, and clearing site data can erase it. Browser storage is limited; Labeldesk shows a warning if it fills up. Export a backup regularly, especially before deleting data or switching devices.
+
+**Moving from an older site address or localhost?** Export a backup from that address and import it at [label-desk.vercel.app](https://label-desk.vercel.app). Each site address has separate browser storage.
