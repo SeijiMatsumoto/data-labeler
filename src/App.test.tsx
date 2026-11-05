@@ -101,6 +101,27 @@ describe("labeling sessions", () => {
     fireEvent.click(screen.getByRole("button", { name: /Resume/ }));
     expect(document.querySelector(".focus-session")).toBeTruthy();
   });
+  it("explains why a finished dataset has no session to start", () => {
+    seedWorkspace({
+      ...sample,
+      annotations: Object.fromEntries(
+        sample.items.map((item) => [
+          item.id,
+          { values: { correct: true, helpfulness: 4 } },
+        ]),
+      ),
+    });
+    window.history.replaceState(null, "", `/datasets/${sample.id}`);
+    render(<App />);
+    expect(
+      (
+        screen.getByRole("button", {
+          name: "All examples completed",
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
+    expect(screen.queryByRole("button", { name: /Start session/ })).toBeNull();
+  });
   it("limits a session to the chosen goal", async () => {
     const big = {
       ...sample,
@@ -146,6 +167,32 @@ describe("labeling sessions", () => {
     expect(
       await screen.findByRole("heading", { name: sample.items[1].id }),
     ).toBeTruthy();
+  });
+});
+describe("export", () => {
+  it("recommends annotated JSON and names files by format", async () => {
+    const user = userEvent.setup();
+    const names: string[] = [];
+    URL.createObjectURL = vi.fn(() => "blob:test");
+    URL.revokeObjectURL = vi.fn();
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (
+      this: HTMLAnchorElement,
+    ) {
+      names.push(this.download);
+    });
+    openSample();
+    await user.click(screen.getByRole("button", { name: "Export" }));
+    for (const name of [
+      /Annotated JSON \(Recommended\)/,
+      /Labels-only JSON/,
+      /^CSV/,
+    ])
+      await user.click(screen.getByRole("button", { name }));
+    expect(names).toEqual([
+      `${sample.id}-annotated.json`,
+      `${sample.id}-labels-only.json`,
+      `${sample.id}-labels-only.csv`,
+    ]);
   });
 });
 describe("moving and restoring datasets", () => {

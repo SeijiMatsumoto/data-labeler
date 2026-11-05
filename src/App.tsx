@@ -1133,6 +1133,13 @@ function WorkspaceApp() {
                     <div style={{ width: `${(done / total) * 100}%` }} />
                   </div>
                 </div>
+                {!session && !candidates?.ids.length && (
+                  <div className="session-start">
+                    <button className="button" disabled>
+                      <Check size={15} /> All examples completed
+                    </button>
+                  </div>
+                )}
                 {!session && !!candidates?.ids.length && (
                   <div className="session-start">
                     {goalOptions.length > 0 && (
@@ -1875,68 +1882,70 @@ function WorkspaceApp() {
                 {completedOnly && done === 0 && (
                   <p>No completed examples to export yet.</p>
                 )}
-                {["Annotated JSON", "Labels-only JSON", "CSV"].map(
-                  (label, i) => (
-                    <button
-                      className="export-option"
-                      disabled={completedOnly && done === 0}
-                      key={label}
-                      onClick={() => {
-                        const items = d.items.filter(
-                          (it) =>
-                            !completedOnly || status(d, it.id) === "completed",
-                        );
-                        const annotations = Object.fromEntries(
-                          items.map((it) => [
-                            it.id,
-                            {
-                              values: Object.fromEntries(
-                                d.rubric.map((f) => [
-                                  f.id,
-                                  d.annotations?.[it.id]?.values[f.id] ?? null,
-                                ]),
-                              ),
-                              skipped: d.annotations?.[it.id]?.skipped || false,
-                              updatedAt: d.annotations?.[it.id]?.updatedAt,
-                            },
-                          ]),
-                        );
-                        const data =
-                          i === 0
-                            ? { ...d, items, annotations }
-                            : i === 1
-                              ? {
-                                  schemaVersion: "1.0",
-                                  datasetId: d.id,
-                                  rubric: d.rubric,
-                                  annotations,
-                                }
-                              : null;
-                        download(
-                          `${d.id}${i === 1 ? "-labels" : ""}.${i === 2 ? "csv" : "json"}`,
-                          i === 2
-                            ? csv(d, completedOnly)
-                            : JSON.stringify(data, null, 2),
-                          i === 2 ? "text/csv" : "application/json",
-                        );
-                        setNotice("Export downloaded.");
-                      }}
-                    >
-                      <Download size={18} />
-                      <div>
-                        <strong>{label}</strong>
-                        <small>
-                          {i === 0
-                            ? "Dataset, rubric, and annotations. Reimport to resume."
-                            : i === 1
-                              ? "Annotations keyed by item ID, with the scoring rubric."
-                              : "One row per example, ready for a spreadsheet."}
-                        </small>
-                      </div>
-                      <ArrowRight size={17} />
-                    </button>
-                  ),
-                )}
+                {[
+                  "Annotated JSON (Recommended)",
+                  "Labels-only JSON",
+                  "CSV",
+                ].map((label, i) => (
+                  <button
+                    className="export-option"
+                    disabled={completedOnly && done === 0}
+                    key={label}
+                    onClick={() => {
+                      const items = d.items.filter(
+                        (it) =>
+                          !completedOnly || status(d, it.id) === "completed",
+                      );
+                      const annotations = Object.fromEntries(
+                        items.map((it) => [
+                          it.id,
+                          {
+                            values: Object.fromEntries(
+                              d.rubric.map((f) => [
+                                f.id,
+                                d.annotations?.[it.id]?.values[f.id] ?? null,
+                              ]),
+                            ),
+                            skipped: d.annotations?.[it.id]?.skipped || false,
+                            updatedAt: d.annotations?.[it.id]?.updatedAt,
+                          },
+                        ]),
+                      );
+                      const data =
+                        i === 0
+                          ? { ...d, items, annotations }
+                          : i === 1
+                            ? {
+                                schemaVersion: "1.0",
+                                datasetId: d.id,
+                                rubric: d.rubric,
+                                annotations,
+                              }
+                            : null;
+                      download(
+                        `${d.id}-${i === 0 ? "annotated" : "labels-only"}.${i === 2 ? "csv" : "json"}`,
+                        i === 2
+                          ? csv(d, completedOnly)
+                          : JSON.stringify(data, null, 2),
+                        i === 2 ? "text/csv" : "application/json",
+                      );
+                      setNotice("Export downloaded.");
+                    }}
+                  >
+                    <Download size={18} />
+                    <div>
+                      <strong>{label}</strong>
+                      <small>
+                        {i === 0
+                          ? "Dataset, rubric, and annotations. Reimport to resume."
+                          : i === 1
+                            ? "Annotations keyed by item ID, with the scoring rubric."
+                            : "One row per example, ready for a spreadsheet."}
+                      </small>
+                    </div>
+                    <ArrowRight size={17} />
+                  </button>
+                ))}
                 <p className="muted">
                   Unanswered fields are null in JSON and empty in CSV. False and
                   zero remain valid values.

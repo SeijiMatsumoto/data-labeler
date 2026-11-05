@@ -97,6 +97,8 @@ Open **Export** and choose the format that fits your next step:
 | Labels-only JSON | Labels keyed by example ID, together with the scoring rubric, for your evaluation workflow. |
 | CSV              | One row per example, with scoring fields as columns, for a spreadsheet.                     |
 
+Annotated JSON is recommended because it's the only format you can import again. File names end in `-annotated` or `-labels-only` so you can tell them apart, for example `my-dataset-annotated.json` or `my-dataset-labels-only.csv`.
+
 You can export all examples or only completed ones. Unanswered fields are `null` in JSON and empty cells in CSV.
 
 If you import a dataset that's already saved, choose **Resume saved dataset** to keep your existing work or **Import as copy** to review the new file separately.
