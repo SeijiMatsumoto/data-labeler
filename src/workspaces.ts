@@ -64,11 +64,12 @@ export function mergeBackup(
   current: Workspace,
   input: any,
   targetWorkspaceId: string,
+  keepBackupWorkspaces = Array.isArray(input.workspaces),
 ): Workspace {
   const backup = normalizeWorkspace(input),
     groups = [...current.workspaces],
     groupMap: Record<string, string> = {};
-  if (!Array.isArray(input.workspaces)) {
+  if (!keepBackupWorkspaces) {
     for (const group of backup.workspaces)
       groupMap[group.id] = targetWorkspaceId;
   } else
@@ -106,6 +107,18 @@ export function mergeBackup(
     activeWorkspaceId: datasets[0]
       ? mapping[datasets[0].id]
       : groupMap[backup.activeWorkspaceId] || targetWorkspaceId,
+  };
+}
+export function moveDataset(
+  state: Workspace,
+  id: string,
+  target: string,
+): Workspace {
+  if (!state.workspaces.some((g) => g.id === target))
+    throw Error("Choose a destination workspace.");
+  return {
+    ...state,
+    datasetWorkspaces: { ...state.datasetWorkspaces, [id]: target },
   };
 }
 export function deleteDataset(state: Workspace, id: string): Workspace {

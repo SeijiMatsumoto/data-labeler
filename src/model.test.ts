@@ -1,5 +1,18 @@
 import { describe, it, expect } from "vitest";
-import { validate, sample, status, csv, validValue } from "./model";
+import { validate, sample, status, csv, validValue, blockRole } from "./model";
+describe("block roles", () => {
+  it("tags prompts as input and responses as output", () => {
+    expect(blockRole("Prompt")).toBe("Input");
+    expect(blockRole("System prompt")).toBe("Input");
+    expect(blockRole("Response")).toBe("Output");
+    expect(blockRole("model response")).toBe("Output");
+  });
+  it("leaves answer keys and other blocks untagged", () => {
+    expect(blockRole("Reference")).toBeNull();
+    expect(blockRole("Expected response")).toBeNull();
+    expect(blockRole("Conversation")).toBeNull();
+  });
+});
 describe("dataset contract", () => {
   it("accepts the example and preserves false and zero", () => {
     const d = structuredClone(sample);

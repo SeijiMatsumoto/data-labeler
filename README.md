@@ -40,7 +40,7 @@ Use **Skip for now** to set an example aside without losing any scores you've al
 
 ## Review comfortably
 
-Examples can include plain text, Markdown, formatted JSON, code, or chat conversations. Prompts, responses, references, and supporting context appear as separate reading blocks.
+Examples can include plain text, Markdown, formatted JSON, code, or chat conversations. Prompts, responses, references, and supporting context appear as separate reading blocks. Blocks labeled as a prompt are tagged **Input**, and blocks labeled as a response are tagged **Output**.
 
 - Use **Compare side by side** when reviewing multiple blocks together.
 - Search examples by ID or content, or filter by review status.
@@ -60,8 +60,22 @@ Shortcuts work when you aren't typing in a text field or choosing an option in a
 | 1–9                     | Choose an option in the selected scoring field                            |
 | 1 / 2 on a binary field | Yes / No                                                                  |
 | N                       | Go to the next unfinished example, or open export when review is complete |
+| Enter / Return          | Move on from a finished example                                           |
+| S                       | Skip the example, or unskip it                                            |
+| F                       | Start or resume a session                                                 |
+| Escape                  | Pause a session, or leave a text field during one                         |
 | Enter / Return          | Submit a create or rename workspace form                                  |
 | Escape                  | Close a dialog                                                            |
+
+## Label in a focused session
+
+Select **Start session** or press **F** to hide the sidebar and everything else you don't need while labeling. A session covers all unfinished examples by default. For larger datasets, choose a smaller goal such as **Next 20**.
+
+- The top bar shows your progress, active time, and an estimate of the time left once you've completed three examples.
+- The timer counts active time only. It pauses when you switch away from the tab, or after 3 minutes without mouse, keyboard, or scroll activity. That idle time isn't counted.
+- While you're away, the browser tab shows your progress and that the session is paused. Press any key to resume when you return.
+- Select **Pause** or press **Escape** to stop the timer. **Leave for now** returns to the full app, and **Resume** appears the next time you open Labeldesk, even after closing the tab.
+- When you finish or select **End session**, you'll see a summary with options to review skipped examples or export.
 
 ## Organize datasets into workspaces
 
@@ -69,6 +83,7 @@ Start in **Default Workspace**, or select **Create workspace** to group datasets
 
 - **Manage** lets you rename the current workspace.
 - Every imported dataset is assigned to a workspace you choose.
+- To move a dataset, select its move button in the sidebar and choose a workspace. This button appears once you have more than one workspace. Labels and positions move with it.
 - Deleting a workspace moves its datasets and labels into another workspace you select. At least one workspace must remain.
 - Each dataset has a delete button in the sidebar. Deleting a dataset removes it and its labels from this browser after confirmation.
 
@@ -88,7 +103,7 @@ If you import a dataset that's already saved, choose **Resume saved dataset** to
 
 ## Keep a backup
 
-Click **Back up workspace** to download all your workspaces, dataset assignments, labels, and saved positions. Restore a backup through **Import dataset**. Restoring adds to your saved data and imports conflicting dataset IDs as copies.
+Click **Back up workspace** to download all your workspaces, dataset assignments, labels, and saved positions. Restore a backup through **Import dataset**. Restoring adds to your saved data and imports conflicting dataset IDs as copies. Choose **Workspaces saved in backup** to put each dataset back where it was, or pick one workspace to hold them all.
 
 Your work is stored in your browser's local storage. It isn't synced across browsers or devices, and clearing site data can erase it. Browser storage is limited; Labeldesk shows a warning if it fills up. Export a backup regularly, especially before deleting data or switching devices.
 

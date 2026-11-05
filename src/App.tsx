@@ -23,10 +23,13 @@ import {
   SkipForward,
   Trash2,
   BookOpen,
+  Timer,
+  FolderInput,
 } from "lucide-react";
 import {
   validate,
   status,
+  blockRole,
   csv,
   sample,
   generatorPrompt,
@@ -42,8 +45,29 @@ import {
   mergeBackup,
   deleteDataset,
   deleteWorkspace,
+  moveDataset,
 } from "./workspaces";
+import {
+  isUnfinished,
+  readSessions,
+  sessionCandidates,
+  sessionCounts,
+  unskipItems,
+  useActiveClock,
+  writeSessions,
+  type LabelSession,
+  type SessionPause,
+  type Sessions,
+} from "./session";
+import {
+  SessionBanner,
+  SessionBar,
+  SessionPauseScreen,
+  SessionSummaryScreen,
+} from "./SessionViews";
 import "./style.css";
+const SESSION_GOALS = [10, 20, 50];
+const KEEP_BACKUP_WORKSPACES = "__keep-backup-workspaces__";
 const KEY = "labeldesk.workspace.v1";
 function read(): { workspace: Workspace; error: string } {
   try {
@@ -76,9 +100,13 @@ function download(name: string, data: string, type = "application/json") {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 function Content({ block: b }: { block: Block }) {
+  const role = blockRole(b.label);
   return (
     <section className="content-block">
       <div className="block-label">
+        {role && (
+          <strong className={`block-role ${role.toLowerCase()}`}>{role}</strong>
+        )}
         {b.label}
         <span>{b.type}</span>
       </div>
@@ -162,7 +190,14 @@ function WorkspaceApp() {
     [moveTarget, setMoveTarget] = useState(""),
     [importWorkspaceId, setImportWorkspaceId] = useState(
       initial.workspace.activeWorkspaceId,
-    );
+    ),
+    [restoreOriginal, setRestoreOriginal] = useState(true),
+    [sessions, setSessions] = useState<Sessions>(readSessions),
+    [focusId, setFocusId] = useState<string | null>(null),
+    [sessionPause, setSessionPause] = useState<SessionPause | null>(null),
+    [finishedSession, setFinishedSession] = useState<LabelSession | null>(null),
+    [sessionGoal, setSessionGoal] = useState("all"),
+    [, setPauseRefresh] = useState(0);
   const panel = new URLSearchParams(location.search).get("panel");
   const workspaceMode =
     new URLSearchParams(location.search).get("action") === "create"
@@ -175,6 +210,7 @@ function WorkspaceApp() {
     "prompt",
     "workspace",
     "delete-dataset",
+    "move-dataset",
   ].includes(panel || "")
     ? (panel as
         | "import"
@@ -182,7 +218,8 @@ function WorkspaceApp() {
         | "rubric"
         | "prompt"
         | "workspace"
-        | "delete-dataset")
+        | "delete-dataset"
+        | "move-dataset")
     : null;
   const setModal = (
     value:
@@ -192,10 +229,12 @@ function WorkspaceApp() {
       | "prompt"
       | "workspace"
       | "delete-dataset"
+      | "move-dataset"
       | null,
   ) => {
     const params = new URLSearchParams(location.search);
-    if (value !== "delete-dataset") params.delete("dataset");
+    if (value !== "delete-dataset" && value !== "move-dataset")
+      params.delete("dataset");
     if (value !== "workspace") params.delete("action");
     if (value) params.set("panel", value);
     else params.delete("panel");
@@ -270,13 +309,16 @@ function WorkspaceApp() {
     (dataset) => w.datasetWorkspaces[dataset.id] === activeWorkspace.id,
   );
   const workspacePath = (id: string) => `/workspaces/${encodeURIComponent(id)}`;
-  const deletingDataset = w.datasets.find(
+  const dialogDataset = w.datasets.find(
     (dataset) =>
       dataset.id === new URLSearchParams(location.search).get("dataset"),
   );
-  const requestDeleteDataset = (id: string) => {
+  const requestDatasetDialog = (
+    panel: "delete-dataset" | "move-dataset",
+    id: string,
+  ) => {
     const params = new URLSearchParams(location.search);
-    params.set("panel", "delete-dataset");
+    params.set("panel", panel);
     params.set("dataset", id);
     navigate({ pathname: location.pathname, search: `?${params}` });
   };
@@ -301,6 +343,13 @@ function WorkspaceApp() {
     );
   }, [modal, workspaceMode, activeWorkspace.id, activeWorkspace.name]);
   useEffect(() => {
+    if (modal !== "move-dataset" || !dialogDataset) return;
+    setMoveTarget(
+      w.workspaces.find((g) => g.id !== w.datasetWorkspaces[dialogDataset.id])
+        ?.id || "",
+    );
+  }, [modal, dialogDataset?.id]);
+  useEffect(() => {
     if (w.activeWorkspaceId === activeWorkspace.id) return;
     dirty.current = true;
     setW((old) => ({ ...old, activeWorkspaceId: activeWorkspace.id }));
@@ -313,6 +362,59 @@ function WorkspaceApp() {
       (route?.params.itemId &&
         d &&
         !d.items.some((item) => item.id === route.params.itemId)));
+  const session = d ? sessions[d.id] : undefined;
+  const inSession = !!session && focusId === d?.id && !notFound;
+  const counts = inSession ? sessionCounts(d!, session!) : null;
+  const focusBeforePause = useRef<HTMLElement | null>(null);
+  const pauseSession = (pause: SessionPause) => {
+    focusBeforePause.current ??= document.activeElement as HTMLElement;
+    setSessionPause(pause);
+  };
+  useActiveClock(
+    inSession && !sessionPause && !modal,
+    session?.activeMs || 0,
+    (activeMs) =>
+      setSessions((old) =>
+        d && old[d.id] ? { ...old, [d.id]: { ...old[d.id], activeMs } } : old,
+      ),
+    pauseSession,
+  );
+  useEffect(() => writeSessions(sessions), [sessions]);
+  useEffect(() => {
+    setSessions((old) => {
+      const kept = Object.entries(old).filter(([id]) =>
+        w.datasets.some((x) => x.id === id),
+      );
+      return kept.length === Object.keys(old).length
+        ? old
+        : Object.fromEntries(kept);
+    });
+  }, [w.datasets]);
+  useEffect(() => {
+    if (!sessionPause) {
+      focusBeforePause.current?.focus();
+      focusBeforePause.current = null;
+      return;
+    }
+    const refresh = () => setPauseRefresh(Date.now());
+    const timer = setInterval(refresh, 15000);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, [sessionPause]);
+  const sessionTitle = counts
+    ? `${sessionPause ? "⏸ " : ""}${counts.handled}/${counts.total}${sessionPause ? " · paused" : ""} · Labeldesk`
+    : null;
+  useEffect(() => {
+    if (!sessionTitle) return;
+    const previous = document.title;
+    document.title = sessionTitle;
+    return () => {
+      document.title = previous;
+    };
+  }, [sessionTitle]);
   useEffect(() => {
     setPending(null);
     setSearch("");
@@ -397,34 +499,138 @@ function WorkspaceApp() {
       },
     }));
   };
-  const needsLabels = (id: string) =>
-    !!d && ["unlabeled", "in progress"].includes(status(d, id));
+  const needsLabels = (id: string, data = d) =>
+    !!data &&
+    isUnfinished(data, id) &&
+    (!inSession || session!.itemIds.includes(id));
   const hasOtherUnlabeled = !!d?.items.some(
     (i) => i.id !== item?.id && needsLabels(i.id),
   );
   const currentIncomplete = !!item && needsLabels(item.id);
-  const nextUnlabeled = () => {
-    if (!d) return;
-    const next = [...d.items.slice(index + 1), ...d.items.slice(0, index)].find(
-      (i) => needsLabels(i.id),
-    );
-    if (next) move(d.items.indexOf(next));
-    else if (currentIncomplete)
-      setNotice("Complete this example or skip it before exporting.");
+  const finishSession = (dataset: Dataset, stored = sessions[dataset.id]) => {
+    setFinishedSession(stored);
+    setSessions(({ [dataset.id]: _, ...rest }) => rest);
+    setFocusId(null);
+    setSessionPause(null);
+  };
+  const resumeSession = (dataset: Dataset, stored = sessions[dataset.id]) => {
+    const target = stored.itemIds
+      .map((id) => dataset.items.findIndex((i) => i.id === id))
+      .find((i) => i >= 0 && isUnfinished(dataset, dataset.items[i].id));
+    if (target === undefined) return finishSession(dataset, stored);
+    setSessions((old) => ({ ...old, [dataset.id]: stored }));
+    setFinishedSession(null);
+    setSessionPause(null);
+    setFocusId(dataset.id);
+    const onTarget =
+      dataset.id === d?.id &&
+      !!item &&
+      stored.itemIds.includes(item.id) &&
+      isUnfinished(dataset, item.id);
+    if (!onTarget) navigate(datasetPath(dataset, target));
+  };
+  const clearSkips = (dataset: Dataset, ids: string[]) => {
+    change((old) => ({
+      ...old,
+      datasets: old.datasets.map((x) =>
+        x.id === dataset.id ? unskipItems(x, ids) : x,
+      ),
+    }));
+    return unskipItems(dataset, ids);
+  };
+  const candidates = d ? sessionCandidates(d, index) : null;
+  const goalOptions = SESSION_GOALS.filter(
+    (n) => n < (candidates?.ids.length || 0),
+  );
+  const selectedGoal = goalOptions.includes(Number(sessionGoal))
+    ? sessionGoal
+    : "all";
+  const startSession = () => {
+    if (!d || !candidates?.ids.length) return;
+    const itemIds =
+      selectedGoal === "all"
+        ? candidates.ids
+        : candidates.ids.slice(0, Number(selectedGoal));
+    resumeSession(candidates.reviewingSkipped ? clearSkips(d, itemIds) : d, {
+      datasetId: d.id,
+      itemIds,
+      activeMs: 0,
+    });
+  };
+  const nextUnlabeled = (data = d) => {
+    if (!data) return;
+    const next = [
+      ...data.items.slice(index + 1),
+      ...data.items.slice(0, index),
+    ].find((i) => needsLabels(i.id, data));
+    if (next) move(data.items.indexOf(next));
+    else if (item && needsLabels(item.id, data))
+      setNotice(
+        inSession
+          ? "Complete this example or skip it to finish the session."
+          : "Complete this example or skip it before exporting.",
+      );
+    else if (inSession) finishSession(data);
     else setModal("export");
+  };
+  const toggleSkip = () => {
+    if (!d || !item) return;
+    const withSkip = (data: Dataset): Dataset => ({
+      ...data,
+      annotations: {
+        ...data.annotations,
+        [item.id]: {
+          ...a,
+          values: a?.values || {},
+          skipped: !a?.skipped,
+          updatedAt: new Date().toISOString(),
+        },
+      },
+    });
+    updateDataset(withSkip);
+    if (inSession && !a?.skipped) nextUnlabeled(withSkip(d));
   };
   useEffect(() => {
     const handle = (e: KeyboardEvent) => {
-      if (
-        modal ||
-        e.metaKey ||
-        e.ctrlKey ||
-        e.altKey ||
-        (e.target as HTMLElement).closest(
-          "input,textarea,select,[contenteditable]",
-        )
-      )
+      const target = e.target as HTMLElement;
+      if (finishedSession || modal || e.metaKey || e.ctrlKey || e.altKey)
         return;
+      if (inSession && sessionPause) {
+        if (["Tab", "Shift", "CapsLock"].includes(e.key)) return;
+        if (["Enter", " "].includes(e.key) && target.closest("button")) return;
+        e.preventDefault();
+        setSessionPause(null);
+        return;
+      }
+      const field = target.closest<HTMLElement>(
+        "input,textarea,select,[contenteditable]",
+      );
+      if (field) {
+        if (inSession && e.key === "Escape") field.blur();
+        return;
+      }
+      if (inSession && e.key === "Escape")
+        pauseSession({ reason: "manual", since: Date.now() });
+      if (!e.repeat && !notFound && d && !inSession) {
+        if (e.key.toLowerCase() === "f") {
+          if (session) resumeSession(d);
+          else startSession();
+        }
+      }
+      if (!e.repeat && !notFound && item) {
+        if (e.key.toLowerCase() === "s") toggleSkip();
+        const onChoice = !!target.closest(".choice");
+        if (
+          e.key === "Enter" &&
+          (onChoice || !target.closest("a,button,summary"))
+        ) {
+          if (!currentIncomplete) {
+            e.preventDefault();
+            nextUnlabeled();
+          } else if (!onChoice)
+            setNotice("Answer the required fields, or press S to skip.");
+        }
+      }
       if (e.key === "ArrowRight") {
         e.preventDefault();
         move(index + 1);
@@ -493,7 +699,9 @@ function WorkspaceApp() {
     setFilter("all");
     navigate(datasetPath(result));
   };
+  const importWorkspacePicked = useRef(false);
   const openImport = () => {
+    importWorkspacePicked.current = false;
     setImportWorkspaceId(activeWorkspace.id);
     setPending(null);
     setBackup(null);
@@ -508,7 +716,10 @@ function WorkspaceApp() {
     setBackupData(null);
     setImportError("");
     setImportText(text);
-    if (modal !== "import") setImportWorkspaceId(activeWorkspace.id);
+    if (modal !== "import") {
+      importWorkspacePicked.current = false;
+      setImportWorkspaceId(activeWorkspace.id);
+    }
     setModal("import");
     try {
       const parsed = JSON.parse(text);
@@ -516,6 +727,7 @@ function WorkspaceApp() {
         const normalized = normalizeWorkspace(parsed);
         setBackup(normalized.datasets);
         setBackupData(parsed);
+        setRestoreOriginal(!importWorkspacePicked.current);
       } else setPending(validate(parsed));
     } catch (e) {
       setImportError(e instanceof Error ? e.message : "Unable to read JSON.");
@@ -540,12 +752,26 @@ function WorkspaceApp() {
       setModal("prompt");
     }
   };
+  const namedBackup = !!backup && Array.isArray(backupData?.workspaces);
+  const keepBackupWorkspaces = namedBackup && restoreOriginal;
   const storageBytes = JSON.stringify(w).length * 2;
   const total = d?.items.length || 0,
     done = d?.items.filter((i) => status(d, i.id) === "completed").length || 0;
+  const waitingSession =
+    session ||
+    Object.values(sessions).find((s) =>
+      w.datasets.some((x) => x.id === s.datasetId),
+    );
+  const waitingDataset = w.datasets.find(
+    (x) => x.id === waitingSession?.datasetId,
+  );
+  const finishedDataset = w.datasets.find(
+    (x) => x.id === finishedSession?.datasetId,
+  );
+  const sessionScreenOpen = (inSession && !!sessionPause) || !!finishedDataset;
   return (
     <div
-      className="app"
+      className={`app ${inSession ? "focus-session" : ""}`}
       onDragEnter={(e) => {
         if (Array.from(e.dataTransfer.types || []).includes("Files")) {
           e.preventDefault();
@@ -581,7 +807,7 @@ function WorkspaceApp() {
           e.target.value = "";
         }}
       />
-      <aside className="sidebar" inert={!!modal}>
+      <aside className="sidebar" inert={!!modal || sessionScreenOpen}>
         <Link className="brand" to={workspacePath(activeWorkspace.id)}>
           <span className="brand-icon">
             <Database size={19} />
@@ -639,10 +865,19 @@ function WorkspaceApp() {
                   <small>{x.items.length} examples</small>
                 </span>
               </Link>
+              {w.workspaces.length > 1 && (
+                <button
+                  className="dataset-move icon"
+                  aria-label={`Move dataset ${x.name}`}
+                  onClick={() => requestDatasetDialog("move-dataset", x.id)}
+                >
+                  <FolderInput size={14} />
+                </button>
+              )}
               <button
                 className="dataset-delete icon"
                 aria-label={`Delete dataset ${x.name}`}
-                onClick={() => requestDeleteDataset(x.id)}
+                onClick={() => requestDatasetDialog("delete-dataset", x.id)}
               >
                 <Trash2 size={14} />
               </button>
@@ -737,7 +972,17 @@ function WorkspaceApp() {
           </div>
         </div>
       </aside>
-      <main inert={!!modal}>
+      <main inert={!!modal || sessionScreenOpen}>
+        {counts && (
+          <SessionBar
+            counts={counts}
+            activeMs={session!.activeMs}
+            onPause={() =>
+              pauseSession({ reason: "manual", since: Date.now() })
+            }
+            onEnd={() => finishSession(d!)}
+          />
+        )}
         <header>
           <div className="breadcrumb">
             <Link to={workspacePath(activeWorkspace.id)}>
@@ -776,6 +1021,15 @@ function WorkspaceApp() {
           </div>
         </header>
         <div className="main-body">
+          {!inSession && waitingSession && waitingDataset && (
+            <SessionBanner
+              name={waitingDataset.name}
+              counts={sessionCounts(waitingDataset, waitingSession)}
+              activeMs={waitingSession.activeMs}
+              onResume={() => resumeSession(waitingDataset)}
+              onEnd={() => finishSession(waitingDataset)}
+            />
+          )}
           {storageBytes > 4 * 1024 * 1024 && !error && (
             <div className="error" role="status">
               Workspace is approaching typical browser storage limits. Download
@@ -868,7 +1122,7 @@ function WorkspaceApp() {
             <>
               <div className="dataset-heading">
                 <div>
-                  <div className="eyebrow">Labeling session</div>
+                  <div className="eyebrow">Dataset</div>
                   <h1>{d.name}</h1>
                 </div>
                 <div className="progress-summary">
@@ -879,6 +1133,32 @@ function WorkspaceApp() {
                     <div style={{ width: `${(done / total) * 100}%` }} />
                   </div>
                 </div>
+                {!session && !!candidates?.ids.length && (
+                  <div className="session-start">
+                    {goalOptions.length > 0 && (
+                      <select
+                        aria-label="Session goal"
+                        value={selectedGoal}
+                        onChange={(e) => setSessionGoal(e.target.value)}
+                      >
+                        <option value="all">
+                          All {candidates.ids.length}{" "}
+                          {candidates.reviewingSkipped
+                            ? "skipped"
+                            : "unfinished"}
+                        </option>
+                        {goalOptions.map((n) => (
+                          <option key={n} value={n}>
+                            Next {n}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                    <button className="button dark" onClick={startSession}>
+                      <Timer size={15} /> Start session <kbd>F</kbd>
+                    </button>
+                  </div>
+                )}
               </div>
               <div className="session">
                 <div className="reader" ref={reader}>
@@ -928,7 +1208,11 @@ function WorkspaceApp() {
                     </span>
                   </div>
                   {d.instructions && (
-                    <details className="instructions" open>
+                    <details
+                      className="instructions"
+                      key={inSession ? item!.id : "instructions"}
+                      open={!inSession || item!.id === session!.itemIds[0]}
+                    >
                       <summary>Labeling instructions</summary>
                       <p>{d.instructions}</p>
                     </details>
@@ -1034,30 +1318,14 @@ function WorkspaceApp() {
                     })}
                   </div>
                   <div className="score-footer">
-                    <button
-                      className="button"
-                      onClick={() =>
-                        updateDataset((data) => ({
-                          ...data,
-                          annotations: {
-                            ...data.annotations,
-                            [item!.id]: {
-                              ...a,
-                              values: a?.values || {},
-                              skipped: !a?.skipped,
-                              updatedAt: new Date().toISOString(),
-                            },
-                          },
-                        }))
-                      }
-                    >
+                    <button className="button" onClick={toggleSkip}>
                       <SkipForward size={15} />
                       {a?.skipped ? "Unskip" : "Skip for now"}
                     </button>
                     <button
                       className="button dark"
                       disabled={!hasOtherUnlabeled && currentIncomplete}
-                      onClick={nextUnlabeled}
+                      onClick={() => nextUnlabeled()}
                     >
                       {hasOtherUnlabeled ? (
                         <>
@@ -1065,6 +1333,8 @@ function WorkspaceApp() {
                         </>
                       ) : currentIncomplete ? (
                         "Complete this example"
+                      ) : inSession ? (
+                        "Finish session"
                       ) : (
                         <>
                           Export results <Download size={15} />
@@ -1081,7 +1351,15 @@ function WorkspaceApp() {
                   <kbd>↑</kbd>
                   <kbd>↓</kbd> field <span>·</span>
                   <kbd>1–9</kbd> score <span>·</span>
-                  <kbd>N</kbd> next unlabeled
+                  <kbd>N</kbd> next unlabeled <span>·</span>
+                  <kbd>S</kbd> skip <span>·</span>
+                  <kbd>Enter</kbd> next when done
+                  {inSession && (
+                    <>
+                      {" "}
+                      <span>·</span> <kbd>Esc</kbd> pause
+                    </>
+                  )}
                 </div>
                 <div className="nav">
                   <button
@@ -1107,6 +1385,39 @@ function WorkspaceApp() {
           )}
         </div>
       </main>
+      {counts && sessionPause && (
+        <SessionPauseScreen
+          pause={sessionPause}
+          counts={counts}
+          activeMs={session!.activeMs}
+          onResume={() => setSessionPause(null)}
+          onLeave={() => {
+            setSessionPause(null);
+            setFocusId(null);
+          }}
+          onEnd={() => finishSession(d!)}
+        />
+      )}
+      {finishedSession && finishedDataset && (
+        <SessionSummaryScreen
+          counts={sessionCounts(finishedDataset, finishedSession)}
+          activeMs={finishedSession.activeMs}
+          onKeepGoing={() => resumeSession(finishedDataset, finishedSession)}
+          onReviewSkipped={() =>
+            resumeSession(
+              clearSkips(finishedDataset, finishedSession.itemIds),
+              finishedSession,
+            )
+          }
+          onExport={() => {
+            setFinishedSession(null);
+            navigate(
+              `${datasetPath(finishedDataset, w.positions[finishedDataset.id] || 0)}?panel=export`,
+            );
+          }}
+          onDone={() => setFinishedSession(null)}
+        />
+      )}
       {dragging && (
         <div className="drop-overlay" role="status">
           <Upload size={38} />
@@ -1145,13 +1456,15 @@ function WorkspaceApp() {
                     : "Manage workspace"
                   : modal === "delete-dataset"
                     ? "Delete dataset"
-                    : modal === "import"
-                      ? "Import dataset"
-                      : modal === "export"
-                        ? "Export your work"
-                        : modal === "rubric"
-                          ? "Configure rubric"
-                          : "Dataset generation prompt"}
+                    : modal === "move-dataset"
+                      ? "Move dataset"
+                      : modal === "import"
+                        ? "Import dataset"
+                        : modal === "export"
+                          ? "Export your work"
+                          : modal === "rubric"
+                            ? "Configure rubric"
+                            : "Dataset generation prompt"}
               </h2>
               <button
                 autoFocus
@@ -1166,14 +1479,29 @@ function WorkspaceApp() {
                 <X size={20} />
               </button>
             </div>
-            {modal === "import" && !backupData?.workspaces && (
+            {modal === "import" && (
               <label className="workspace-picker import-workspace">
-                Assign dataset to workspace
+                {backup ? "Restore to" : "Assign dataset to workspace"}
                 <select
                   aria-label="Import workspace"
-                  value={importWorkspaceId}
-                  onChange={(e) => setImportWorkspaceId(e.target.value)}
+                  value={
+                    keepBackupWorkspaces
+                      ? KEEP_BACKUP_WORKSPACES
+                      : importWorkspaceId
+                  }
+                  onChange={(e) => {
+                    const keep = e.target.value === KEEP_BACKUP_WORKSPACES;
+                    setRestoreOriginal(keep);
+                    if (keep) return;
+                    importWorkspacePicked.current = true;
+                    setImportWorkspaceId(e.target.value);
+                  }}
                 >
+                  {namedBackup && (
+                    <option value={KEEP_BACKUP_WORKSPACES}>
+                      Workspaces saved in backup
+                    </option>
+                  )}
                   {w.workspaces.map((group) => (
                     <option key={group.id} value={group.id}>
                       {group.name}
@@ -1291,24 +1619,80 @@ function WorkspaceApp() {
                 )}
               </>
             )}
+            {modal === "move-dataset" && (
+              <>
+                {dialogDataset ? (
+                  <>
+                    <p>
+                      Move “{dialogDataset.name}” to another workspace. Its
+                      labels and position stay with it.
+                    </p>
+                    <label className="workspace-picker import-workspace">
+                      Move to
+                      <select
+                        aria-label="Move dataset to"
+                        value={moveTarget}
+                        onChange={(e) => setMoveTarget(e.target.value)}
+                      >
+                        {w.workspaces
+                          .filter(
+                            (group) =>
+                              group.id !==
+                              w.datasetWorkspaces[dialogDataset.id],
+                          )
+                          .map((group) => (
+                            <option key={group.id} value={group.id}>
+                              {group.name}
+                            </option>
+                          ))}
+                      </select>
+                    </label>
+                  </>
+                ) : (
+                  <p>This dataset has already been deleted.</p>
+                )}
+                <div className="modal-actions">
+                  <button className="button" onClick={() => setModal(null)}>
+                    Cancel
+                  </button>
+                  {dialogDataset && (
+                    <button
+                      className="button dark"
+                      disabled={!moveTarget}
+                      onClick={() => {
+                        change((old) =>
+                          moveDataset(old, dialogDataset.id, moveTarget),
+                        );
+                        setModal(null);
+                        setNotice(
+                          `Moved to ${w.workspaces.find((g) => g.id === moveTarget)?.name}.`,
+                        );
+                      }}
+                    >
+                      Move dataset
+                    </button>
+                  )}
+                </div>
+              </>
+            )}
             {modal === "delete-dataset" && (
               <>
                 <p>
-                  {deletingDataset
-                    ? `Delete “${deletingDataset.name}” and its labels from this browser? This cannot be undone. Download a backup first if you need to keep them.`
+                  {dialogDataset
+                    ? `Delete “${dialogDataset.name}” and its labels from this browser? This cannot be undone. Download a backup first if you need to keep them.`
                     : "This dataset has already been deleted."}
                 </p>
                 <div className="modal-actions">
                   <button className="button" onClick={() => setModal(null)}>
                     Cancel
                   </button>
-                  {deletingDataset && (
+                  {dialogDataset && (
                     <button
                       className="button delete-action"
                       onClick={() => {
-                        change((old) => deleteDataset(old, deletingDataset.id));
+                        change((old) => deleteDataset(old, dialogDataset.id));
                         setModal(null);
-                        if (d?.id === deletingDataset.id)
+                        if (d?.id === dialogDataset.id)
                           navigate(workspacePath(activeWorkspace.id));
                       }}
                     >
@@ -1383,8 +1767,10 @@ function WorkspaceApp() {
                   <p>
                     This backup contains {backup.length} datasets. Restore adds
                     them to your saved data; conflicting IDs are imported as
-                    copies. Named workspaces and their dataset assignments are
-                    preserved. Older backups use the selected workspace.
+                    copies.{" "}
+                    {keepBackupWorkspaces
+                      ? "Each dataset returns to the workspace it was in when the backup was made."
+                      : `All of them go into ${w.workspaces.find((g) => g.id === importWorkspaceId)?.name}.`}
                   </p>
                   <button
                     className="button dark"
@@ -1393,6 +1779,7 @@ function WorkspaceApp() {
                         w,
                         backupData,
                         importWorkspaceId,
+                        keepBackupWorkspaces,
                       );
                       change(() => restored);
                       setBackup(null);
@@ -1556,7 +1943,7 @@ function WorkspaceApp() {
                 </p>
                 <button
                   className="text-button danger"
-                  onClick={() => requestDeleteDataset(d.id)}
+                  onClick={() => requestDatasetDialog("delete-dataset", d.id)}
                 >
                   <Trash2 size={14} /> Remove dataset from this browser
                 </button>

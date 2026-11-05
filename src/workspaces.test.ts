@@ -6,6 +6,7 @@ import {
   mergeBackup,
   deleteWorkspace,
   deleteDataset,
+  moveDataset,
 } from "./workspaces";
 describe("workspace data management", () => {
   it("migrates legacy data into Default Workspace without losing labels or position", () => {
@@ -69,6 +70,42 @@ describe("workspace data management", () => {
     expect(next.datasetWorkspaces[restored.id]).toBe("review");
     expect(next.positions[restored.id]).toBe(2);
     expect(next.workspaces.some((w) => w.name === "Review")).toBe(true);
+  });
+  it("can place a named backup entirely in the chosen workspace", () => {
+    const state = emptyWorkspace();
+    state.workspaces.push({ id: "b", name: "B" });
+    const backup = {
+      datasets: [sample, { ...sample, id: "other" }],
+      workspaces: [
+        { id: "default", name: "Default Workspace" },
+        { id: "review", name: "Review" },
+      ],
+      datasetWorkspaces: { [sample.id]: "default", other: "review" },
+    };
+    const next = mergeBackup(state, backup, "b", false);
+    expect(next.datasetWorkspaces).toEqual({ [sample.id]: "b", other: "b" });
+    expect(next.workspaces.map((g) => g.id)).toEqual(["default", "b"]);
+    expect(next.activeWorkspaceId).toBe("b");
+  });
+  it("moves a dataset between workspaces and keeps its labels", () => {
+    const dataset = structuredClone(sample);
+    dataset.annotations = { "answer-001": { values: { correct: true } } };
+    const state = normalizeWorkspace({
+      datasets: [dataset],
+      positions: { [dataset.id]: 2 },
+      workspaces: [
+        { id: "a", name: "A" },
+        { id: "b", name: "B" },
+      ],
+      datasetWorkspaces: { [dataset.id]: "a" },
+    });
+    const next = moveDataset(state, dataset.id, "b");
+    expect(next.datasetWorkspaces[dataset.id]).toBe("b");
+    expect(next.datasets).toEqual(state.datasets);
+    expect(next.positions).toEqual(state.positions);
+    expect(() => moveDataset(state, dataset.id, "missing")).toThrow(
+      "destination",
+    );
   });
   it("assigns legacy backups to the selected workspace and restores empty groups", () => {
     const state = emptyWorkspace();

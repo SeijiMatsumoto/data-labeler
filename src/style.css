@@ -18,6 +18,7 @@
   --accent-soft: #edf2ff;
   --success: #287149;
   --danger: #a73332;
+  --success-soft: #e9f4ee;
 }
 * {
   box-sizing: border-box;
@@ -582,6 +583,20 @@ header {
   gap: 9px;
   border-bottom: 1px solid var(--border);
   padding-bottom: 10px;
+}
+.block-role {
+  padding: 1px 7px;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 3px;
+}
+.block-role.input {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+.block-role.output {
+  color: var(--success);
+  background: var(--success-soft);
 }
 .block-label span {
   font-weight: 400;
@@ -1582,13 +1597,22 @@ input[type="checkbox"] {
   position: relative;
 }
 .dataset-entry .dataset {
-  padding-right: 30px;
+  padding-right: 56px;
   min-width: 0;
 }
 .dataset-delete {
   position: absolute;
   right: 4px;
   color: var(--text-muted);
+}
+.dataset-move {
+  position: absolute;
+  right: 30px;
+  color: var(--text-muted);
+}
+.dataset-move:hover {
+  color: var(--text);
+  background: var(--subtle);
 }
 .dataset-delete:hover {
   color: var(--danger);
@@ -1681,5 +1705,216 @@ input[type="checkbox"] {
   }
   .prompt-callout .button {
     margin-left: 0;
+  }
+}
+
+/* Labeling sessions */
+.session-start {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.session-start select {
+  height: 34px;
+  padding: 0 8px;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+}
+.button kbd {
+  margin-left: 2px;
+  padding: 0 5px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 16px;
+  color: inherit;
+  background: none;
+  border: 1px solid currentColor;
+  border-radius: 3px;
+  box-shadow: none;
+  opacity: 0.65;
+}
+.focus-session .sidebar,
+.focus-session main > header,
+.focus-session .dataset-heading {
+  display: none;
+}
+.focus-session .main-body {
+  max-width: 1400px;
+  padding-top: 18px;
+}
+.session-bar {
+  height: 56px;
+  min-height: 56px;
+  padding: 0 34px;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 24px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+.session-bar-progress {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.session-bar-progress strong {
+  font-weight: 600;
+  color: var(--text);
+}
+.session-bar-progress .progress-track {
+  flex: 1;
+  max-width: 220px;
+  margin-top: 0;
+}
+.session-bar-time {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  white-space: nowrap;
+}
+.session-bar-time [role="timer"] {
+  font-family: var(--font-mono);
+  font-size: 17px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+.session-bar-time small {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.session-bar-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.session-banner {
+  margin: 18px 34px 0;
+  padding: 10px 12px 10px 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--accent-soft);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.session-banner > div {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 10px;
+  font-size: 13px;
+}
+.session-banner strong {
+  font-weight: 600;
+}
+.session-banner span {
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+.session-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  padding: 16px;
+  display: grid;
+  place-items: center;
+  overflow-y: auto;
+  background: var(--canvas);
+}
+.session-screen-card {
+  width: min(440px, 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+.session-screen-card h2 {
+  margin: 0;
+  font-size: 23px;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+}
+.session-screen-card p {
+  margin: 8px 0 0;
+  color: var(--text-muted);
+}
+.session-screen-card .session-screen-goal {
+  margin: 20px 0 24px;
+  color: var(--text);
+}
+.session-screen-goal strong {
+  font-weight: 600;
+}
+.session-screen-card > .button {
+  min-width: 160px;
+  justify-content: center;
+}
+.session-screen-hint {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.session-screen-actions {
+  margin-top: 28px;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+.session-stats {
+  width: 100%;
+  margin: 24px 0 0;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.session-stats > div {
+  padding: 14px 6px;
+}
+.session-stats > div + div {
+  border-left: 1px solid var(--border);
+}
+.session-stats dt {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.session-stats dd {
+  margin: 6px 0 0;
+  font-family: var(--font-mono);
+  font-size: 19px;
+  font-variant-numeric: tabular-nums;
+}
+@media (max-width: 850px) {
+  .session-bar {
+    height: auto;
+    padding: 10px 16px;
+    grid-template-columns: 1fr auto;
+    gap: 8px 16px;
+  }
+  .session-bar-actions {
+    grid-column: 1 / -1;
+  }
+  .session-banner {
+    margin: 12px 16px 0;
+    flex-wrap: wrap;
+  }
+  .session-banner > div {
+    flex-basis: 100%;
+  }
+}
+@media (max-width: 600px) {
+  .dataset-heading:has(.session-start) {
+    flex-wrap: wrap;
   }
 }

@@ -12,6 +12,7 @@ import {
 import userEvent from "@testing-library/user-event";
 import App from "./App";
 import { sample, validate } from "./model";
+import { IDLE_MS } from "./session";
 const key = "labeldesk.workspace.v1";
 beforeEach(() => {
   localStorage.clear();
@@ -21,6 +22,184 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+});
+const seedWorkspace = (dataset = sample) =>
+  localStorage.setItem(
+    key,
+    JSON.stringify({
+      datasets: [dataset],
+      activeId: dataset.id,
+      positions: { [dataset.id]: 0 },
+      workspaces: [
+        { id: "default", name: "Default Workspace" },
+        { id: "review", name: "Review" },
+      ],
+      activeWorkspaceId: "default",
+      datasetWorkspaces: { [dataset.id]: "default" },
+    }),
+  );
+const openSample = () => {
+  seedWorkspace();
+  window.history.replaceState(null, "", `/datasets/${sample.id}`);
+  return render(<App />);
+};
+const stored = () => JSON.parse(localStorage.getItem(key)!);
+describe("labeling sessions", () => {
+  const start = async () => {
+    const user = userEvent.setup();
+    const view = openSample();
+    await user.click(screen.getByRole("button", { name: /Start session/ }));
+    return { user, view };
+  };
+  const setHidden = (hidden: boolean) => {
+    Object.defineProperty(document, "hidden", {
+      configurable: true,
+      value: hidden,
+    });
+    fireEvent(document, new Event("visibilitychange"));
+  };
+  afterEach(() => {
+    delete (document as any).hidden;
+    vi.useRealTimers();
+  });
+  it("focuses the page and shows progress in the tab title", async () => {
+    await start();
+    expect(document.querySelector(".app")!.className).toContain(
+      "focus-session",
+    );
+    expect(screen.getByRole("timer").textContent).toBe("00:00");
+    expect(document.title).toBe(`0/${sample.items.length} · Labeldesk`);
+  });
+  it("pauses when the tab is hidden and resumes on any key", async () => {
+    await start();
+    act(() => setHidden(true));
+    expect(document.title).toContain("paused");
+    act(() => setHidden(false));
+    expect(screen.getByRole("dialog", { name: "Welcome back" })).toBeTruthy();
+    fireEvent.keyDown(document.body, { key: "x" });
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(document.title).not.toContain("paused");
+  });
+  it("takes idle time back off the clock", () => {
+    vi.useFakeTimers();
+    openSample();
+    fireEvent.click(screen.getByRole("button", { name: /Start session/ }));
+    act(() => void vi.advanceTimersByTime(5000));
+    fireEvent.pointerMove(window);
+    act(() => void vi.advanceTimersByTime(IDLE_MS + 2000));
+    expect(screen.getByRole("dialog", { name: "Still there?" })).toBeTruthy();
+    expect(screen.getByRole("timer", { hidden: true }).textContent).toBe(
+      "00:05",
+    );
+  });
+  it("offers to resume after the tab closes", async () => {
+    const { view } = await start();
+    view.unmount();
+    window.history.replaceState(null, "", "/");
+    render(<App />);
+    expect(screen.getByText("Unfinished session")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /Resume/ }));
+    expect(document.querySelector(".focus-session")).toBeTruthy();
+  });
+  it("limits a session to the chosen goal", async () => {
+    const big = {
+      ...sample,
+      items: Array.from({ length: 12 }, (_, i) => ({
+        ...sample.items[0],
+        id: `item-${i}`,
+      })),
+    };
+    seedWorkspace(big);
+    window.history.replaceState(null, "", `/datasets/${sample.id}`);
+    const user = userEvent.setup();
+    render(<App />);
+    await user.selectOptions(
+      screen.getByRole("combobox", { name: "Session goal" }),
+      "10",
+    );
+    await user.click(screen.getByRole("button", { name: /Start session/ }));
+    expect(document.title).toBe("0/10 · Labeldesk");
+  });
+  it("finishes with a summary, then reviews skipped examples", async () => {
+    await start();
+    sample.items.forEach(() => fireEvent.keyDown(document.body, { key: "s" }));
+    expect(
+      await screen.findByRole("dialog", { name: "Session complete" }),
+    ).toBeTruthy();
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: `Review skipped (${sample.items.length})`,
+      }),
+    );
+    expect(document.querySelector(".focus-session")).toBeTruthy();
+    expect(document.title).toBe(`0/${sample.items.length} · Labeldesk`);
+  });
+  it("moves on with Enter only when the example is finished", async () => {
+    await start();
+    const first = sample.items[0].id;
+    fireEvent.keyDown(document.body, { key: "Enter" });
+    expect(screen.getByRole("heading", { name: first })).toBeTruthy();
+    fireEvent.keyDown(document.body, { key: "1" });
+    fireEvent.keyDown(document.body, { key: "ArrowDown" });
+    fireEvent.keyDown(document.body, { key: "4" });
+    fireEvent.keyDown(document.body, { key: "Enter" });
+    expect(
+      await screen.findByRole("heading", { name: sample.items[1].id }),
+    ).toBeTruthy();
+  });
+});
+describe("moving and restoring datasets", () => {
+  it("moves a dataset to another workspace", async () => {
+    const user = userEvent.setup();
+    openSample();
+    await user.click(
+      screen.getByRole("button", { name: `Move dataset ${sample.name}` }),
+    );
+    await user.selectOptions(
+      screen.getByRole("combobox", { name: "Move dataset to" }),
+      "review",
+    );
+    await user.click(screen.getByRole("button", { name: "Move dataset" }));
+    await waitFor(() =>
+      expect(stored().datasetWorkspaces[sample.id]).toBe("review"),
+    );
+  });
+  it("honors a workspace chosen before loading a named backup", async () => {
+    const user = userEvent.setup();
+    seedWorkspace({ ...sample, id: "existing" });
+    window.history.replaceState(null, "", "/?panel=import");
+    render(<App />);
+    await user.selectOptions(
+      screen.getByRole("combobox", { name: "Import workspace" }),
+      "review",
+    );
+    const backup = {
+      format: "labeldesk-workspace/1",
+      datasets: [sample],
+      positions: {},
+      workspaces: [{ id: "default", name: "Default Workspace" }],
+      datasetWorkspaces: { [sample.id]: "default" },
+    };
+    fireEvent.change(screen.getByLabelText("Dataset JSON"), {
+      target: { value: JSON.stringify(backup) },
+    });
+    await user.click(
+      screen.getByRole("button", {
+        name: /Preview dataset/,
+      }),
+    );
+    expect(
+      (
+        screen.getByRole("combobox", {
+          name: "Import workspace",
+        }) as HTMLSelectElement
+      ).value,
+    ).toBe("review");
+    await user.click(screen.getByRole("button", { name: "Restore backup" }));
+    await waitFor(() =>
+      expect(stored().datasetWorkspaces[sample.id]).toBe("review"),
+    );
+  });
 });
 describe("labeling workflow", () => {
   it("saves binary No and scale values, resumes after remount, and clears answers", async () => {

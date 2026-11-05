@@ -209,6 +209,13 @@ export function status(d: Dataset, id: string) {
     ? "completed"
     : "in progress";
 }
+/** Expected or reference responses are answer keys, not the model's output. */
+export function blockRole(label: string): "Input" | "Output" | null {
+  if (/\b(reference|expected|ideal|gold)\b/i.test(label)) return null;
+  if (/\bprompt\b/i.test(label)) return "Input";
+  if (/\bresponse\b/i.test(label)) return "Output";
+  return null;
+}
 export function csv(d: Dataset, completedOnly = false) {
   const rows = [
     ["item_id", "status", ...d.rubric.map((f) => f.id)],
